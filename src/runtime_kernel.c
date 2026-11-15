@@ -118,7 +118,52 @@ static _Atomic uint64_t sleep_calls, sleep_total_ns;
 void runtime_sleep_stats(uint64_t *calls, uint64_t *ns) {
     *calls=atomic_exchange(&sleep_calls,0); *ns=atomic_exchange(&sleep_total_ns,0);
 }
-static int sleep_ns(uint64_t ns) {
+unsigned char *runtime_guest_image;
+/* deadpool-port BB_SLEEP_TRACE=1: who sleeps, by guest return address (image offset), how often
+ * and for how long, every 5 s. Finds a frame limiter in the game's own code (Unreal Engine 3
+ * paces itself with a sleep when its frame rate is smoothed/capped). */
+typedef struct { uintptr_t caller; uint64_t calls, requested_ns, slept_ns; } SleepSite;
+static SleepSite sleep_sites[48];
+static pthread_mutex_t sleep_sites_mutex=PTHREAD_MUTEX_INITIALIZER;
+static int sleep_trace_on(void) {
+    static int on=-1;
+    if (on<0) { const char *e=getenv("BB_SLEEP_TRACE"); on=e && e[0]=='1'; }
+    return on;
+}
+static void sleep_trace(uintptr_t caller, uint64_t requested, uint64_t slept) {
+    static struct timespec last;
+    struct timespec now; clock_gettime(CLOCK_MONOTONIC,&now);
+    pthread_mutex_lock(&sleep_sites_mutex);
+    SleepSite *site=NULL;
+    for (int i=0;i<48;++i) {
+        if (sleep_sites[i].caller==caller || !sleep_sites[i].caller) { site=&sleep_sites[i]; break; }
+    }
+    if (site) {
+        site->caller=caller; site->calls++; site->requested_ns+=requested; site->slept_ns+=slept;
+    }
+    if (!last.tv_sec) last=now;
+    if (now.tv_sec-last.tv_sec>=5) {
+        double secs=(double)(now.tv_sec-last.tv_sec)+(now.tv_nsec-last.tv_nsec)/1e9;
+        char name[32]="?";
+        pthread_getname_np(pthread_self(),name,sizeof(name));
+        printf("Sleep trace (%.1f s):\n",secs);
+        for (int i=0;i<48 && sleep_sites[i].caller;++i) {
+            SleepSite *s=&sleep_sites[i];
+            if (s->calls) {
+                long long off=runtime_guest_image ? (long long)(s->caller-(uintptr_t)runtime_guest_image) : 0;
+                printf("  caller image+0x%llx: %.1f calls/s, asked %.2f ms, slept %.2f ms each\n",
+                       off,s->calls/secs,s->requested_ns/1e6/s->calls,s->slept_ns/1e6/s->calls);
+            }
+            s->calls=s->requested_ns=s->slept_ns=0;
+        }
+        last=now;
+    }
+    pthread_mutex_unlock(&sleep_sites_mutex);
+}
+
+static int sleep_ns_from(uint64_t ns, uintptr_t caller);
+static int sleep_ns(uint64_t ns) { return sleep_ns_from(ns, 0); }
+static int sleep_ns_from(uint64_t ns, uintptr_t caller) {
     uint64_t elapsed;
 #ifdef _WIN32
     struct timespec a, b;
@@ -137,19 +182,27 @@ static int sleep_ns(uint64_t ns) {
     atomic_fetch_add(&sleep_calls,1);
     atomic_fetch_add(&sleep_total_ns,elapsed);
     runtime_wait_note(3,elapsed);
+    if (caller && sleep_trace_on()) sleep_trace(caller,ns,elapsed);
     return result;
 }
-static ABI int32_t kernel_usleep(uint32_t usec) { sleep_ns((uint64_t)usec*1000); return 0; }
-static ABI int32_t posix_usleep(uint32_t usec) { sleep_ns((uint64_t)usec*1000); return 0; }
+static ABI int32_t kernel_usleep(uint32_t usec) {
+    sleep_ns_from((uint64_t)usec*1000,(uintptr_t)__builtin_return_address(0)); return 0;
+}
+static ABI int32_t posix_usleep(uint32_t usec) {
+    sleep_ns_from((uint64_t)usec*1000,(uintptr_t)__builtin_return_address(0)); return 0;
+}
 static ABI uint32_t posix_sleep(uint32_t seconds) { sleep_ns((uint64_t)seconds*1000000000); return 0; }
-static ABI int32_t posix_nanosleep(const GuestTimespec *rq,GuestTimespec *rem) {
+static int32_t nanosleep_from(const GuestTimespec *rq,GuestTimespec *rem,uintptr_t caller) {
     if (!rq || rq->nsec<0 || rq->nsec>=1000000000 || rq->sec<0) return fail_posix(EINVAL);
-    sleep_ns((uint64_t)rq->sec*1000000000+(uint64_t)rq->nsec);
+    sleep_ns_from((uint64_t)rq->sec*1000000000+(uint64_t)rq->nsec,caller);
     if (rem) { rem->sec=0; rem->nsec=0; }
     return 0;
 }
+static ABI int32_t posix_nanosleep(const GuestTimespec *rq,GuestTimespec *rem) {
+    return nanosleep_from(rq,rem,(uintptr_t)__builtin_return_address(0));
+}
 static ABI int32_t kernel_nanosleep(const GuestTimespec *rq,GuestTimespec *rem) {
-    return posix_nanosleep(rq,rem) ? ERR(*runtime_errno()) : 0;
+    return nanosleep_from(rq,rem,(uintptr_t)__builtin_return_address(0)) ? ERR(*runtime_errno()) : 0;
 }
 typedef struct { int32_t minuteswest, dsttime; } GuestTimezone;
 static ABI int32_t kernel_gettimezone(GuestTimezone *tz) {
@@ -372,7 +425,9 @@ static ABI int32_t memory_module_segment_info(void *info) {
 static ABI int32_t kernel_mlock(const void *address,uint64_t length) { (void)address; (void)length; return 0; }
 /* libSceLibcInternalExt: heap tracing is off; no trace buffer exists. */
 static ABI int32_t libc_heap_trace_info(void *info) { (void)info; return ERR(2); }
-static ABI int32_t posix_nanosleep_alias(const GuestTimespec *rq,GuestTimespec *rem) { return posix_nanosleep(rq,rem); }
+static ABI int32_t posix_nanosleep_alias(const GuestTimespec *rq,GuestTimespec *rem) {
+    return nanosleep_from(rq,rem,(uintptr_t)__builtin_return_address(0));
+}
 /* Time zone conversions with the host's zone (the console uses the user's configured zone). */
 #ifdef _WIN32
 #define TM_GMTOFF(lt,t) compat_utc_offset(t) /* struct tm has no tm_gmtoff on Windows */

@@ -40,6 +40,8 @@ void runtime_memory_note_write(uintptr_t address, uint64_t size);
 void runtime_memory_note_cpu_write(uintptr_t address, uint64_t size);
 /* bbport (frame stats): a guest thread was blocked `ns` in the runtime (0 cond, 1 mutex, 2 sema, 3 sleep). */
 void runtime_wait_note(int kind, uint64_t ns);
+/* The guest image's base (probe.c): guest offsets in diagnostics. */
+extern unsigned char *runtime_guest_image;
 void runtime_wait_report(double frames);
 void runtime_guest_call_sites(uint64_t out[3]);
 /* bbport: times the game's heap asked for more memory (posix_mmap): a sign it leaks. */

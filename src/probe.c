@@ -792,6 +792,7 @@ int main(int argc, char **argv) {
     image = allocate(round_page(size) + stub_area);
     unsigned char *stubs = image + round_page(size);
     image_size = size;
+    runtime_guest_image = image;
     if (fread(image, 1, size, f) != size || fgetc(f) != EOF) fail("incorrect memory image size");
     fclose(f);
     if (isa_table && isa_table_matches(isa_table, image, size)) {
