@@ -198,6 +198,8 @@ public:
 
     /// Reuploads image contents.
     void RefreshImage(Image& image);
+    /// deadpool-port: the stencil plane of a depth image, when the GPU wrote its memory.
+    void RefreshStencil(Image& depth_image);
     void WatchImage(const Image& image, const char* what);
 
     /// Retrieves the sampler that matches the provided S# descriptor.

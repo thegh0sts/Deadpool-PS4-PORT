@@ -127,6 +127,20 @@ void NoteWrite(std::uint64_t address, std::uint64_t value, std::uint32_t bytes, 
     if (!hit) {
         return;
     }
+    // deadpool-port: Unreal Engine 3 puts the labels of its end-of-shader fences inside its own
+    // command buffers, on purpose, so EOS fence writes land there every frame (tens of thousands
+    // of lines in a run). They are reported 4 times, then counted silently.
+    static std::atomic<std::uint64_t> eos_hits{0};
+    if (source == Eos && hit->seq <= decoding_now) {
+        const std::uint64_t e = eos_hits.fetch_add(1, std::memory_order_relaxed) + 1;
+        if (e > 4) {
+            return;
+        }
+        if (e == 4) {
+            std::fprintf(stderr, "Guest write check: EOS fence writes into command buffers are "
+                                 "expected for this game; no more are reported\n");
+        }
+    }
     const std::uint64_t n = hits.fetch_add(1, std::memory_order_relaxed) + 1;
     if (n > 24 && n % 500 != 0) {
         return;

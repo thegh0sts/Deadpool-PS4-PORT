@@ -74,6 +74,10 @@ public:
     };
     void UploadImage(VideoCore::Image* dst, const VideoCore::Buffer* src,
                      std::span<const vk::BufferImageCopy> upload_copies);
+    /// deadpool-port: copies `size` bytes of stencil (one byte per texel, rows of `pitch`) from
+    /// `src` at `offset` into the stencil aspect of the depth image `dst`.
+    void UploadStencil(VideoCore::Image* dst, const VideoCore::Buffer* src, u64 offset, u32 pitch,
+                       u32 width, u32 height);
     void DownloadImage(VideoCore::Image* src, const VideoCore::Buffer* dst,
                        std::span<const vk::BufferImageCopy> download_copies);
 

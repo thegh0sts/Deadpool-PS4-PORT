@@ -103,3 +103,16 @@ for the GPU library, SDL3 and the Vulkan check; `--cpu-only`), on the EU dump:
 - Only my own dumps. Never commit or publish game files or anything derived from them
   (dump folders, `out\`, `user\`, `boot-linked.bin`).
 - Commits use `17183580+thegh0sts@users.noreply.github.com`, not my email.
+
+## Title-screen corruption (2026-11-15)
+
+Black wedges and grey slabs on alternating frames. The frame capture showed UE3 clearing stencil
+with a compute shader (b4539088c3c6baca) that writes zeros over the stencil plane of the
+960x540 and 1920x1080 D32S8 depth targets. The texture cache never applied that write to the
+depth images' stencil aspect, so the light-volume stencil was never cleared and shadow
+projections darkened everything outside each light. Fix: `TextureCache::RefreshStencil`
+(texture_cache.cpp) copies the GPU-written stencil bytes into the depth image when it is next
+bound (`Runtime::UploadStencil`). The log says "Stencil sync: ..." the first 4 times it fires.
+The copy is linear (no detiling): exact for fills, not for patterned stencil data.
+
+The "Guest write check: EOS fence" lines are expected for UE3 and are now reported 4 times only.

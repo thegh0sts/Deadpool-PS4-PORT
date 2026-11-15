@@ -871,9 +871,58 @@ ImageView& TextureCache::FindDepthTarget(ImageId image_id, const ImageDesc& desc
         Image& stencil_image = slot_images[stencil_id];
         TouchImage(stencil_image);
         stencil_image.AssociateDepth(image_id, image.image_uid);
+        RefreshStencil(image);
     }
 
     return image.FindView(desc.view_info, false);
+}
+
+// deadpool-port: a stencil plane cleared by the GPU through its memory. Unreal Engine 3 on the PS4
+// (Deadpool) clears stencil with a compute shader that writes zeros over the stencil plane,
+// between lights (the half-resolution light-volume stencil of its shadow projection) and once a
+// frame (the scene's). That write reaches the buffer cache and marks the placeholder image at the
+// stencil address GpuDirty, but the stencil the GPU tests against is the stencil aspect of the
+// depth image, which RefreshImage never uploads: the old stencil stayed, and shadows were
+// projected outside each light's volume (black wedges, alternating frames). The written bytes
+// are now copied into the stencil aspect when the depth image is next bound. They are copied
+// linearly: exact for the fills seen (every byte the same); stencil data written by the GPU with
+// a pattern would need the depth tiling undone first.
+void TextureCache::RefreshStencil(Image& depth_image) {
+    const VAddr address = depth_image.info.stencil_addr;
+    if (!address || !(depth_image.aspect_mask & vk::ImageAspectFlagBits::eStencil)) {
+        return;
+    }
+    Image* placeholder = nullptr;
+    ForEachImageInRegion(address, 1, [&](ImageId, Image& image) {
+        if (image.info.guest_address == address && image.depth_id) {
+            placeholder = &image;
+        }
+    });
+    if (!placeholder || False(placeholder->flags & ImageFlagBits::GpuDirty)) {
+        return;
+    }
+    placeholder->flags &= ~ImageFlagBits::GpuDirty;
+    static std::atomic<u32> logged{0};
+    if (depth_image.info.num_samples > 1) {
+        if (logged.fetch_add(1) < 4) {
+            std::printf("Stencil sync: GPU write to the stencil of %#llx (MSAA) not applied\n",
+                        (unsigned long long)depth_image.info.guest_address);
+        }
+        return;
+    }
+    const u32 width = depth_image.info.size.width, height = depth_image.info.size.height;
+    const u32 pitch = depth_image.info.pitch ? depth_image.info.pitch : width;
+    const u32 size = depth_image.info.stencil_size ? depth_image.info.stencil_size : pitch * height;
+    if (u64(pitch) * height > size || pitch < width) {
+        return;
+    }
+    if (logged.fetch_add(1) < 4) {
+        std::printf("Stencil sync: GPU write to the stencil of %#llx (%ux%u) copied into its depth image\n",
+                    (unsigned long long)depth_image.info.guest_address, width, height);
+    }
+    scheduler.EndRendering();
+    const auto [buffer, offset] = buffer_cache.ObtainBufferForImage(address, size);
+    runtime.UploadStencil(&depth_image, buffer, offset, pitch, width, height);
 }
 
 void TextureCache::RefreshImage(Image& image) {

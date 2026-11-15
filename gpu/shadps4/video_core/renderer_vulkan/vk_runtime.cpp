@@ -301,6 +301,40 @@ void Runtime::UploadImage(VideoCore::Image* dst, const VideoCore::Buffer* src,
     dst->flags &= ~VideoCore::ImageFlagBits::Dirty;
 }
 
+void Runtime::UploadStencil(VideoCore::Image* dst, const VideoCore::Buffer* src, u64 offset,
+                            u32 pitch, u32 width, u32 height) {
+    SetBackingSamples(dst, dst->info.num_samples, false);
+    scheduler.EndRendering();
+    const TransferMark mark{*this, "stencil upload", *dst};
+    const u64 size = u64(pitch) * height;
+    bool needs_flush =
+        Transit(dst, vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits2::eCopy,
+                vk::AccessFlagBits2::eTransferWrite);
+    needs_flush |= IsBufferAccessed(src, offset, size);
+    if (needs_flush) {
+        FlushBarriers();
+    }
+    const vk::BufferImageCopy copy{
+        .bufferOffset = offset,
+        .bufferRowLength = pitch,
+        .bufferImageHeight = height,
+        .imageSubresource{
+            .aspectMask = vk::ImageAspectFlagBits::eStencil,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .imageOffset = {0, 0, 0},
+        .imageExtent = {width, height, 1},
+    };
+    scheduler.Record([src_handle = src->Handle(), image = dst->GetImage(),
+                      copy](vk::CommandBuffer cmdbuf) {
+        cmdbuf.copyBufferToImage(src_handle, image, vk::ImageLayout::eTransferDstOptimal, 1, &copy);
+    });
+    AccessBuffer(src, offset, size, vk::PipelineStageFlagBits2::eCopy,
+                 vk::AccessFlagBits2::eTransferRead);
+}
+
 void Runtime::DownloadImage(VideoCore::Image* src, const VideoCore::Buffer* dst,
                             std::span<const vk::BufferImageCopy> download_copies) {
     SetBackingSamples(src, src->info.num_samples);
