@@ -63,6 +63,14 @@ public:
     }
 
     /// Returns the Vulkan device
+    /// deadpool-port: occlusion queries (vk_occlusion.h).
+    bool IsHostQueryResetSupported() const {
+        return vk12_features.hostQueryReset;
+    }
+    bool IsOcclusionQueryPrecise() const {
+        return features.occlusionQueryPrecise;
+    }
+
     vk::Device GetDevice() const {
         return *device;
     }

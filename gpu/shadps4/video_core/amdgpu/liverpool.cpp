@@ -36,6 +36,7 @@
 #include "bbport_clobber.h"
 #include "video_core/amdgpu/pm4_cmds.h"
 #include "video_core/renderdoc.h"
+#include "video_core/renderer_vulkan/vk_occlusion.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
 
 extern "C" int runtime_memory_vma_info(uintptr_t address, int* prot, int* type, uintptr_t* end);
@@ -605,6 +606,28 @@ void WriteEosLabel(void* address, u64 value, u32 num_bytes) {
         rasterizer->NoteLateCommandWrite(reinterpret_cast<VAddr>(address), &value, num_bytes);
     }
     BbFreeCheck::NoteFenceWritten(reinterpret_cast<u64>(address));
+}
+
+// deadpool-port: occlusion query results (vk_occlusion.h), written as labels are.
+void WriteOcclusionWord(VAddr address, u64 value) {
+    auto* memory = Core::Memory::Instance();
+    void* target = reinterpret_cast<void*>(address);
+    if (!memory->TryWriteBacking(target, &value, sizeof(value))) {
+        StoreLabel(target, value, sizeof(value));
+    }
+    if (auto* rasterizer = memory->GetRasterizer()) {
+        rasterizer->NoteLateCommandWrite(address, &value, sizeof(value));
+    }
+}
+
+struct OcclusionEvent {
+    u64 address;
+    u32 num_pairs;
+};
+
+void RunOcclusionEvent(Vulkan::Rasterizer& rasterizer, const u8* data) {
+    const auto& event = *reinterpret_cast<const OcclusionEvent*>(data);
+    rasterizer.Occlusion().Event(event.address, event.num_pairs, &WriteOcclusionWord);
 }
 
 void RunEventWriteEos(Vulkan::Rasterizer& rasterizer, const u8* data) {
@@ -1548,7 +1571,14 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 if (event->event_type.Value() == EventType::SoVgtStreamoutFlush) {
                     // registers: ApplyGraphicsRegisterPacket
                 } else if (event->event_index.Value() == EventIndex::ZpassDone) {
-                    if (event->event_type.Value() == EventType::PixelPipeStatDump) {
+                    if (event->event_type.Value() == EventType::PixelPipeStatDump && rasterizer &&
+                        rasterizer->Occlusion().Enabled() && !BbToggle::Experiment(1)) {
+                        // deadpool-port: a real query over the draws between the two events.
+                        const OcclusionEvent occlusion{event->Address<u64>(),
+                                                       u32(num_counter_pairs)};
+                        rasterizer->RunInOrder(&RunOcclusionEvent, &occlusion, sizeof(occlusion),
+                                               BbToggle::PipelinedTasks, false);
+                    } else if (event->event_type.Value() == EventType::PixelPipeStatDump) {
                         static constexpr u64 OcclusionCounterValidMask = 0x8000000000000000ULL;
                         static constexpr u64 OcclusionCounterStep = 0x2FFFFFFULL;
                         u64* results = event->Address<u64*>();

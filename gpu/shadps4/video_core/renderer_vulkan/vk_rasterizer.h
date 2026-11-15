@@ -38,6 +38,7 @@ class MemoryManager;
 namespace Vulkan {
 
 class GraphicsPipeline;
+class OcclusionQueries;
 class Runtime;
 
 class Rasterizer {
@@ -86,6 +87,10 @@ public:
     /// bbport: draw preparation workers (vk_draw_prep.h), fed and consumed by Liverpool.
     DrawPreparation& GetDrawPreparation() {
         return *draw_prep;
+    }
+    /// deadpool-port: ZPASS_DONE occlusion queries (vk_occlusion.h).
+    OcclusionQueries& Occlusion() {
+        return *occlusion;
     }
     void DrawIndirect(bool is_indexed, VAddr arg_address, u32 offset, u32 size, u32 max_count,
                       VAddr count_address, u16 vertex_sgpr_offset, u16 instance_sgpr_offset);
@@ -444,6 +449,7 @@ private:
     Common::SharedFirstMutex mapped_ranges_mutex;
     PipelineCache pipeline_cache;
     std::unique_ptr<DrawPreparation> draw_prep;
+    std::unique_ptr<OcclusionQueries> occlusion;
     std::unique_ptr<CameraMotion> camera_motion; // bbport: motion vectors (docs/upscaler.md)
     std::unique_ptr<SceneTargets> scene_targets;
     bool scene_started = false;

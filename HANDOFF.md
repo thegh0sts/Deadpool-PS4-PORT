@@ -134,3 +134,12 @@ without conversion) and uses integer 1. `Shader::Profile::port_recompiler_revisi
 so pipeline caches from older builds are rebuilt (bump it when the recompiler output changes).
 Not changed yet: the same float-one default in buffer-format loads (lower_buffer_format_to_raw)
 and storage image reads.
+
+Occlusion queries (first level: huge light coronas/lens flares everywhere): ZPASS_DONE events
+were answered by a stand-in counter (always "millions visible"); answering "nothing visible"
+instead (toggle-file experiment bit 1) culled almost the whole level, so UE3 uses the queries
+for visibility culling as well as corona fading. `vk_occlusion.{h,cpp}` implements them with
+Vulkan occlusion queries: the event at A begins a query, the one at A+8 ends it; the scheduler's
+CarriedScope ends and restarts the Vulkan query at render pass / command buffer boundaries, and
+the summed count is written to render backend 0's end word after the GPU finishes
+(SignalAfterGpu). BB_OCCLUSION=0 restores the stand-in.

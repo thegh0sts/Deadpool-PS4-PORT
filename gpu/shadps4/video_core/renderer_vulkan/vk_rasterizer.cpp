@@ -19,6 +19,7 @@
 #include "bbport_clobber.h"
 #include "bbport_guest_memory.h"
 #include "video_core/renderer_vulkan/vk_frame_capture.h"
+#include "video_core/renderer_vulkan/vk_occlusion.h"
 #include "common/hash.h"
 #include "common/debug.h"
 #include "core/debug_state.h"
@@ -97,6 +98,7 @@ Rasterizer::Rasterizer(const Instance& instance_, Scheduler& scheduler_, Runtime
       guest_markers_enabled{EmulatorSettings.IsVkGuestMarkersEnabled()} {
     // Before the rasterizer is bound: Liverpool enqueues buffers only once it sees it.
     draw_prep = std::make_unique<DrawPreparation>(pipeline_cache);
+    occlusion = std::make_unique<OcclusionQueries>(instance, scheduler, *this);
     scene_targets = std::make_unique<SceneTargets>(instance, scheduler, runtime, texture_cache);
     // Object motion first: it fixes the buffer addresses the motion shader variants embed.
     object_motion = std::make_unique<ObjectMotion>(instance, scheduler);
