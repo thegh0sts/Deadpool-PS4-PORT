@@ -2758,9 +2758,9 @@ void ControllersPage() {
         ImGui::TextColored(ImVec4(1, 1, 1, 1), "%s", ICON_GAMEPAD);
         ImGui::SameLine();
         ImGui::TextWrapped("%s", T("No hay mandos conectados. Conecta uno por USB o Bluetooth: aparece aquí al momento. "
-                                   "El teclado funciona siempre (página Teclado).",
+                                   "El teclado también funciona siempre.",
                                    "No controllers connected. Plug one in over USB or pair it over Bluetooth: it shows "
-                                   "up here at once. The keyboard always works (Keyboard page)."));
+                                   "up here at once. The keyboard always works too."));
         EndCard();
     } else {
         bool found = false;
@@ -2990,9 +2990,9 @@ void ControllersPage() {
             SaveLauncher();
         }
         HelpMarker(T("Con menos del 100 % el giro llega al máximo antes del tope del stick: útil con sticks gastados o mandos "
-                     "que no llegan al borde. Es el anillo naranja.",
+                     "que no llegan al borde. Es el anillo rojo.",
                      "Below 100 % the turn reaches its maximum before the stick's edge: useful for worn sticks or "
-                     "controllers that do not reach the edge. It is the orange ring."));
+                     "controllers that do not reach the edge. It is the red ring."));
         LauncherFlag("pad_center_cal", T("Corregir el centro de mandos genéricos", "Correct the centre of generic controllers"), true,
                      T("Algunos mandos clónicos dicen estar inclinados con el stick suelto; el port mide su centro al conectarlos. "
                        "Desactívalo solo si un mando original se comporta raro.",
@@ -3008,26 +3008,12 @@ void ControllersPage() {
 }
 
 void ControlsTab() {
-    if (ImGui::BeginTabBar("controls")) {
-        if (ImGui::BeginTabItem((std::string(ICON_GAMEPAD "  ") + T("Mandos", "Controllers") + "###pads").c_str())) {
-            if (g_key_capture >= 0) g_key_capture = -1;
-            ImGui::BeginChild("pads");
-            ControllersPage();
-            ImGui::EndChild();
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem((std::string(ICON_KEYBOARD "  ") + T("Teclado", "Keyboard") + "###keys").c_str())) {
-            if (g_pad_capture >= 0) {
-                g_pad_capture = -1;
-                Pads::CancelCapture();
-            }
-            ImGui::BeginChild("keyboard");
-            KeyboardTab();
-            ImGui::EndChild();
-            ImGui::EndTabItem();
-        }
-        ImGui::EndTabBar();
-    }
+    // Controllers only: the keyboard page was removed (the keyboard still works in the game,
+    // with its default keys or bbport.ini key.* lines).
+    if (g_key_capture >= 0) g_key_capture = -1;
+    ImGui::BeginChild("pads");
+    ControllersPage();
+    ImGui::EndChild();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -3887,7 +3873,7 @@ void PlaySummary() {
     }
     if (ImGui::Button((std::string(ICON_SETTINGS "  ") + T("Cambiar ajustes", "Change settings")).c_str())) g_goto_tab = "settings";
     ImGui::SameLine();
-    if (ImGui::Button((std::string(ICON_GAMEPAD "  ") + T("Mandos y teclado", "Controllers and keyboard")).c_str()))
+    if (ImGui::Button((std::string(ICON_GAMEPAD "  ") + T("Mandos", "Controllers")).c_str()))
         g_goto_tab = "controls";
 }
 
