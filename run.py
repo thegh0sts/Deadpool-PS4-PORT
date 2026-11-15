@@ -298,7 +298,7 @@ def main():
                            text=True, encoding='utf-8', errors='replace', creationflags=no_console())
     if check.returncode:
         fail(check.stdout.strip() or 'Game check failed.', 2)
-    env['BB_GAME_PROFILE'] = check.stdout.strip() or 'ctr'
+    env['BB_GAME_PROFILE'] = check.stdout.strip() or 'deadpool'
     # The game's own title ID and version: the European edition (CUSA14876) has its own patches.
     info = subprocess.run([sys.executable, '-X', 'utf8', str(PORT / 'scripts' / 'game_check.py'), '--info',
                            str(game)], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True,

@@ -52,7 +52,7 @@ if [[ ! -f $game/eboot.bin ]]; then echo "No eboot.bin in $game (set BB_GAME_DIR
 # The game check (scripts/game_check.py) compares the executable image with the supported one
 # (Crash Team Racing Nitro-Fueled CUSA13795 1.21) and names the profile the runtime reads.
 profile=$("$PYTHON" scripts/game_check.py "$game") || { echo "$profile" >&2; exit 2; }
-export BB_GAME_PROFILE=${profile:-ctr}
+export BB_GAME_PROFILE=${profile:-deadpool}
 echo "Game profile: $BB_GAME_PROFILE"
 original_game=$game
 game=$("$PYTHON" scripts/mods.py "$game" --out "$out" \

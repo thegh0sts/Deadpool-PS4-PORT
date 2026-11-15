@@ -1,52 +1,44 @@
 #!/usr/bin/env python3
 """The game files this port runs, keyed on the executable's loaded image.
 
-Profile: Crash Team Racing Nitro-Fueled CUSA13795 with the 1.21 update merged in. The check
-compares the loaded executable image, whose hash is the same whatever tool dumped it (the SELF
-headers around it differ). BB_SKIP_GAME_CHECK=1 skips it. bbport's Bloodborne profile was removed
-on 2026-10-09.
+Profile: Deadpool (High Moon Studios, Unreal Engine 3), the European edition CUSA03528 version
+01.00 (EP0002-CUSA03528_00-DEADPOOLPS400000, firmware 2.70). The check compares the loaded
+executable image, whose hash is the same whatever tool dumped it (the SELF headers around it
+differ). BB_SKIP_GAME_CHECK=1 skips it.
 
-Two builds of the 1.21 update exist: the one rebuilt for firmware 5.05 (sdk_ver=05050000 in
-param.sfo; the image in SUPPORTED, which the port was developed on) and the original one for
-firmware 6.72+. Same game, different executable. A 1.21 executable that is not a known old one is
-accepted as `variant='6.72+'`: patches.py finds its patch sites by signature instead of address,
-and the log says it is the less-tested build.
+The North American edition (CUSA03245) runs the same 01.00 build; its profile will be added from a
+clean dump. Community repacks of the game (60 FPS, Coalesced.ini edits, network calls stubbed out
+with `xor eax,eax; ret`) change the executable and carry an sce_sys/changeinfo/changeinfo.xml that
+a console dump of the game has not: they are refused as 'modified'.
 
-The European edition (CUSA14876) is accepted by title at any version (variant='eu'), as in
-martijnhe's OCTR-NitroFueled-PC-EU: its 1.21 runs the same code as the USA 1.21 build, so the
-community patches come from patches/CrashTeamRacingEU.xml (the 1.21 signatures, and the 1.00
-base game's own) and the render patches apply by signature.
+Forked from CTR-NitroFueled-PC (GetLostIn), itself a fork of SacredFire; its Crash Team Racing
+profiles were removed on 2026-11-15.
 """
 import hashlib
 import os
-import struct
 import sys
 from pathlib import Path
 
 # image sha256 -> profile. `name` is what the runtime and the GPU menu read (BB_GAME_PROFILE);
-# `modules` are the sce_module PRXs link_modules.py links natively; `patches` says whether
-# patches.py has a patch file for it.
+# `modules` are the sce_module PRXs link_modules.py links natively (the executable imports only
+# these two: libSceFace, libSceHand, libSceSmart and libSceS3DConversion ship with the game but
+# are not in its DT_NEEDED list); `patches` says whether patches.py has a patch file for it.
 SUPPORTED = {
-    '2f2115893ac6656925d20a0221f118cff398fbd754cb9c10154451411dbcf8e6': dict(
-        name='ctr', title='CUSA13795', version='01.21', game='Crash Team Racing Nitro-Fueled', update='CUSA13795-patch',
-        modules=('libc.prx', 'libSceFios2.prx', 'libSceNpToolkit2.prx'), patches=True),
+    'a5ec3f24a2951e75f2dafb741b8ebd2c80200e5fd1bd8a26addc78ba0ff3e30d': dict(
+        name='deadpool', title='CUSA03528', version='01.00', game='Deadpool (EU)',
+        content_id='EP0002-CUSA03528_00-DEADPOOLPS400000',
+        languages=('English', 'French', 'Spanish', 'German', 'Italian'),
+        modules=('libc.prx', 'libSceFios2.prx'), patches=False),
 }
 BY_TITLE = {p['title']: p for p in SUPPORTED.values()}
-# Editions accepted by title at any version, whatever their executable.
-EDITIONS = {
-    'CUSA14876': dict(
-        name='ctr', title='CUSA14876', version='01.21', game='Crash Team Racing Nitro-Fueled (EU)',
-        update='CUSA14876-patch', modules=('libc.prx', 'libSceFios2.prx', 'libSceNpToolkit2.prx'),
-        patches=True),
+# Editions of the game whose clean image is not known yet: recognised by title so the message can
+# say so, never run.
+KNOWN_TITLES = {
+    'CUSA03245': 'Deadpool (North America)',
 }
-# Images that are known NOT to be 1.21: the base game's executable (1.00). With a 1.21 param.sfo
-# these mean the update's eboot.bin was not copied in.
-OLD_IMAGES = {
-    'a9cdc80f2170624e08bdddab128fc9cdaf5c71aa90c00fc669d830e366ba6833': '01.00',
-}
-SUPPORTED_TITLE = 'CUSA13795'
-SUPPORTED_VERSION = '01.21'
-SUPPORTED_IMAGE = '2f2115893ac6656925d20a0221f118cff398fbd754cb9c10154451411dbcf8e6'
+SUPPORTED_TITLE = 'CUSA03528'
+SUPPORTED_VERSION = '01.00'
+SUPPORTED_IMAGE = 'a5ec3f24a2951e75f2dafb741b8ebd2c80200e5fd1bd8a26addc78ba0ff3e30d'
 
 
 def image_sha256(game):
@@ -68,21 +60,10 @@ def profile(game, image_hash=None):
     except (OSError, ValueError, IndexError, StopIteration, KeyError):
         image_hash = None
     if image_hash in SUPPORTED:
-        return dict(SUPPORTED[image_hash], variant='5.05')
-    edition = sfo_info(game).get('TITLE_ID')
-    if edition in EDITIONS:
-        return dict(EDITIONS[edition], version=sfo_info(game).get('APP_VER', '?'), variant='eu')
-    if image_hash and problem(game, image_hash) is None and os.environ.get('BB_SKIP_GAME_CHECK') != '1':
-        info = sfo_info(game)
-        return dict(BY_TITLE[info['TITLE_ID']], variant='6.72+')
+        return dict(SUPPORTED[image_hash])
     if os.environ.get('BB_SKIP_GAME_CHECK') != '1':
         return None
-    from prepare import sfo
-    try:
-        info = sfo((Path(game) / 'sce_sys/param.sfo').read_bytes())
-    except (OSError, ValueError, IndexError):
-        return None
-    return BY_TITLE.get(info.get('TITLE_ID'))
+    return BY_TITLE.get(sfo_info(game).get('TITLE_ID'))
 
 
 def sfo_info(game):
@@ -100,88 +81,55 @@ def split_layout(game):
     return (game / 'Image0/eboot.bin').is_file() and not (game / 'sce_module').is_dir()
 
 
-def damaged_archives(game):
-    """The archives/*.pak (IGA) files whose file-name table is all zeros. An extractor that
-    inflates the package's compressed PFS blocks only partly (LibOrbisPkg's PFSCReader on .NET Core
-    and later: one DeflateStream.Read per 64 KiB block) leaves zeros at the ends of blocks; where
-    they land on an archive's name table the game cannot find its files, and with loosefiles.pak
-    (localizationData.igz) it stops at start with a read of address 0x20 (code 3)."""
-    damaged = []
-    for path in sorted((Path(game) / 'archives').glob('*.pak')):
-        try:
-            with open(path, 'rb') as f:
-                header = f.read(0x38)
-                if len(header) < 0x38 or header[:4] != b'IGA\x1a':
-                    continue
-                offset, size = struct.unpack_from('<I', header, 0x28)[0], struct.unpack_from('<I', header, 0x30)[0]
-                if not size:
-                    continue
-                f.seek(offset)
-                names = f.read(size)
-        except OSError:
-            continue
-        if len(names) == size and not any(names):
-            damaged.append(path.name)
-    return damaged
+def changeinfo(game):
+    """The text of sce_sys/changeinfo/changeinfo.xml, or None. A console dump of 01.00 has none;
+    repacks list their changes there."""
+    try:
+        return (Path(game) / 'sce_sys/changeinfo/changeinfo.xml').read_text('utf-8', 'replace')
+    except OSError:
+        return None
 
 
 def problem(game, image_hash=None):
-    """None for a supported game, else (kind, title, version): kind is 'missing_update' (base
-    game or an older update), 'wrong_eboot' (param.sfo names the supported update, eboot.bin is
-    another version), 'split_layout' (Image0 + Sc0 not flattened), 'other_title' (another edition, region or game),
-    'unreadable' or 'damaged_archives' (archives with zeroed name tables: a bad extraction)."""
+    """None for a supported game, else (kind, title, version): kind is 'split_layout' (Image0 +
+    Sc0 not flattened), 'unreadable', 'modified' (a repack: changeinfo.xml, or a known title with
+    another executable), 'unsupported_edition' (an edition whose clean image is not known yet) or
+    'other_title' (another game)."""
     if os.environ.get('BB_SKIP_GAME_CHECK') == '1':
         return None
     if split_layout(game):
         return 'split_layout', '?', '?'
-    from prepare import sfo
-    try:
-        info = sfo((Path(game) / 'sce_sys/param.sfo').read_bytes())
-    except (OSError, ValueError, IndexError):
-        info = {}
+    info = sfo_info(game)
     title, version = info.get('TITLE_ID', '?'), info.get('APP_VER', '?')
-    if title in EDITIONS:
-        damaged = damaged_archives(game)
-        return ('damaged_archives', title, version) if damaged else None
     try:
         image_hash = image_hash or image_sha256(game)
     except (OSError, ValueError, IndexError, StopIteration, KeyError):
         return 'unreadable', title, version
-    if image_hash not in SUPPORTED:
-        if title not in BY_TITLE:
-            return 'other_title', title, version
-        if version != BY_TITLE[title]['version']:
-            return 'missing_update', title, version
-        if image_hash in OLD_IMAGES:
-            return 'wrong_eboot', title, version
-        # otherwise another 1.21 build (6.72+): accepted, see the module docstring
-    if damaged_archives(game):
-        return 'damaged_archives', title, version
-    return None
+    if image_hash in SUPPORTED:
+        return None
+    if changeinfo(game) is not None or title in BY_TITLE:
+        return 'modified', title, version
+    if title in KNOWN_TITLES:
+        return 'unsupported_edition', title, version
+    return 'other_title', title, version
 
 
 def explain(kind, title, version):
     """What is wrong and what to do, for the log (English)."""
     found = f'Found {title} version {version} (sce_sys/param.sfo).'
-    p = BY_TITLE.get(title, BY_TITLE[SUPPORTED_TITLE])
     supported = ', '.join(f"{q['game']} {q['title']} {q['version']}" for q in SUPPORTED.values())
     return {
-        'missing_update': f"{found} The port needs the {p['version']} update merged into the game folder: copy "
-                          f"everything from the dumped {p['version']} update (e.g. {p['update']}) into the "
-                          'game folder, replacing files (eboot.bin and sce_sys too).',
-        'wrong_eboot': f"{found} param.sfo is from {p['version']} but eboot.bin is not: copy eboot.bin from "
-                       f"the dumped {p['version']} update into the game folder, replacing the old one.",
-        'other_title': f'{found} Supported: {supported}; other editions and regions have a different executable.',
+        'modified': f'{found} The executable is not the original one: this looks like a modified '
+                    'repack (patched eboot.bin, a changeinfo.xml listing community changes). '
+                    f'Dump the game again from your own disc or installation. Supported: {supported}.',
+        'unsupported_edition': f'{found} This edition ({KNOWN_TITLES.get(title, title)}) is not '
+                               f'supported yet. Supported: {supported}.',
+        'other_title': f'{found} Supported: {supported}.',
         'split_layout': 'The game folder has the PS4 PKG Tool layout (Image0 and Sc0): choose it in the '
                         'launcher and press "Prepare the game", or copy everything in Image0 to the game folder '
                         'and everything in Sc0 to its sce_sys folder.',
         'unreadable': f'{found} eboot.bin could not be read as a decrypted PS4 executable: dump '
-                      'the game and its update again.',
-        'damaged_archives': f'{found} Some archives/*.pak files have their file-name table filled with zeros, '
-                            'so the game cannot find its files (it would stop at start with code 3). The '
-                            'package was extracted badly: extract the game and its update again with another '
-                            'tool, or with a LibOrbisPkg/PkgTool build that reads every compressed PFS block '
-                            'completely, then merge them again.',
+                      'the game again.',
     }[kind]
 
 
@@ -196,11 +144,6 @@ if __name__ == '__main__':
     game = Path(args[0]) if args else Path('.')
     found = problem(game)
     if found:
-        message = 'Unsupported game files: ' + explain(*found)
-        if found[0] == 'damaged_archives':
-            damaged = damaged_archives(game)
-            message += f' Damaged ({len(damaged)}): ' + ', '.join(damaged[:10]) + (', ...' if len(damaged) > 10 else '')
-        sys.exit(message)
-    p = profile(game)
-    print(p['name'] if p else 'unknown')
-
+        sys.exit('Unsupported game files: ' + explain(*found))
+    found = profile(game)
+    print(found['name'] if found else 'unknown')

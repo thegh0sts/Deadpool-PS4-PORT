@@ -43,3 +43,12 @@ gpu/shim/bbport_gnm_table.inc
 /launcher.ini
 /CUSA13795*/
 *.pkg
+
+# Deadpool: the game dumps (your own) and anything derived from them, never committed
+/Deadpool.PS4-*/
+/CUSA03528*/
+/CUSA03245*/
+eboot.bin
+*.prx
+*.sprx
+boot*.bin
