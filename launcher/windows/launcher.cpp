@@ -1327,6 +1327,7 @@ const ImVec4 kAccent{1.0f, 0.54f, 0.12f, 1.0f};        // #FF8A1F
 const ImVec4 kRedButton{0.84f, 0.15f, 0.18f, 1.0f};        // #D7262E
 const ImVec4 kRedButtonHover{0.91f, 0.26f, 0.29f, 1.0f};   // #E8434A
 const ImVec4 kRedButtonActive{0.69f, 0.12f, 0.15f, 1.0f};  // #B01E25
+const ImVec4 kCardBlack{0.0f, 0.0f, 0.0f, 0.8f};           // cards and the log over the background art
 const ImVec4 kAccentHover{1.0f, 0.63f, 0.26f, 1.0f};
 const ImVec4 kAccentActive{0.91f, 0.45f, 0.06f, 1.0f};
 const ImVec4 kBlue{0.30f, 0.64f, 1.0f, 1.0f};
@@ -1434,8 +1435,9 @@ bool RedCheckbox(const char* label, bool* v) {
 
 /// A rounded panel that grows with its content.
 void BeginCard(const char* id) {
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, kCard);
-    ImGui::PushStyleColor(ImGuiCol_Border, kBorder);
+    // 80% black over the background art, a red outline.
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, kCardBlack);
+    ImGui::PushStyleColor(ImGuiCol_Border, kRedButton);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f * g_ui_scale);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * g_ui_scale, 12.0f * g_ui_scale));
     ImGui::BeginChild(id, ImVec2(0, 0),
@@ -1475,7 +1477,7 @@ void ApplyTheme(float scale) {
     ImVec4* c = st.Colors;
     c[ImGuiCol_Text] = kText;
     c[ImGuiCol_TextDisabled] = ImVec4(0.45f, 0.48f, 0.56f, 1.0f);
-    c[ImGuiCol_WindowBg] = kBg;
+    c[ImGuiCol_WindowBg] = ImVec4(0, 0, 0, 1);  // black (the two-column layout)
     c[ImGuiCol_ChildBg] = ImVec4(0, 0, 0, 0);
     c[ImGuiCol_PopupBg] = kPanel;
     c[ImGuiCol_Border] = kBorder;
@@ -1492,9 +1494,10 @@ void ApplyTheme(float scale) {
     c[ImGuiCol_CheckMark] = kAccent;
     c[ImGuiCol_SliderGrab] = kAccent;
     c[ImGuiCol_SliderGrabActive] = kAccentHover;
-    c[ImGuiCol_Button] = kFrame;
-    c[ImGuiCol_ButtonHovered] = kFrameHover;
-    c[ImGuiCol_ButtonActive] = kFrameActive;
+    // Buttons in Deadpool red (white labels: kText), as the Play button.
+    c[ImGuiCol_Button] = kRedButton;
+    c[ImGuiCol_ButtonHovered] = kRedButtonHover;
+    c[ImGuiCol_ButtonActive] = kRedButtonActive;
     c[ImGuiCol_Header] = ImVec4(1.0f, 0.54f, 0.12f, 0.20f);
     c[ImGuiCol_HeaderHovered] = ImVec4(1.0f, 0.54f, 0.12f, 0.30f);
     c[ImGuiCol_HeaderActive] = ImVec4(1.0f, 0.54f, 0.12f, 0.42f);
@@ -1722,10 +1725,11 @@ void PlayTab() {
         ImGui::CollapsingHeader(T("Registro", "Log"), a.game_running || a.show_exit ? ImGuiTreeNodeFlags_DefaultOpen : 0);
     ImGui::PopStyleColor(4);
     if (log_open) {
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kPanel);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, kCardBlack);
+        ImGui::PushStyleColor(ImGuiCol_Border, kRedButton);
         ImGui::BeginChild("log", ImVec2(0, std::max(ImGui::GetContentRegionAvail().y, ImGui::GetFontSize() * 12.0f)),
                           ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
-        ImGui::PopStyleColor();
+        ImGui::PopStyleColor(2);
         {
             std::scoped_lock lock{a.mutex};
             ImGuiListClipper clipper;
@@ -3672,48 +3676,19 @@ std::string EditionLabel() {
            " · " + title;
 }
 
-void Header() {
-    App& a = g_app;
-    const float s = g_ui_scale;
-    const ImVec2 win = ImGui::GetWindowPos();
-    const float width = ImGui::GetWindowSize().x;
-    const float height = 74.0f * s;
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    const ImU32 left = IM_COL32(0x2A, 0x1B, 0x3E, 0xFF), right = IM_COL32(0x15, 0x19, 0x2A, 0xFF);
-    if (g_banner) {
-        // art\banner.png, cropped to fill the bar; the left and right ends darkened for the title
-        // and the status labels.
-        const auto [uv0, uv1] = CoverUv(g_banner_size, ImVec2(width, height));
-        dl->AddImage(ImTextureRef(ImTextureID(reinterpret_cast<intptr_t>(g_banner))), win,
-                     ImVec2(win.x + width, win.y + height), uv0, uv1);
-        const ImU32 shade = IM_COL32(0, 0, 0, 0xA0), clear = IM_COL32(0, 0, 0, 0);
-        dl->AddRectFilledMultiColor(win, ImVec2(win.x + width * 0.35f, win.y + height), shade, clear, clear, shade);
-        dl->AddRectFilledMultiColor(ImVec2(win.x + width * 0.70f, win.y), ImVec2(win.x + width, win.y + height), clear,
-                                    shade, shade, clear);
-    } else {
-        dl->AddRectFilledMultiColor(win, ImVec2(win.x + width, win.y + height), left, right, right, left);
-    }
-    dl->AddRectFilledMultiColor(ImVec2(win.x, win.y + height - 3 * s), ImVec2(win.x + width, win.y + height),
-                                IM_COL32(0xB8, 0x14, 0x1C, 0xFF), IM_COL32(0xE8, 0x2A, 0x32, 0xFF),
-                                IM_COL32(0xE8, 0x2A, 0x32, 0xFF), IM_COL32(0xB8, 0x14, 0x1C, 0xFF));
-    const float pad = 18.0f * s, logo = 50.0f * s;
-    float x = win.x + pad;
-    if (g_logo) {
-        const float y = win.y + (height - logo) * 0.5f;
-        dl->AddImage(ImTextureRef(ImTextureID(reinterpret_cast<intptr_t>(g_logo))), ImVec2(x, y), ImVec2(x + logo, y + logo));
-        x += logo + 14.0f * s;
-    }
-    ImFont* title_font = g_font_title ? g_font_title : ImGui::GetFont();
-    const float title_size = 30.0f * s;
-    dl->AddText(title_font, title_size, ImVec2(x, win.y + 10.0f * s), IM_COL32(0xFF, 0xFF, 0xFF, 0xFF), "Deadpool PS4 Port");
-    std::string version = a.version;
-    if (const auto dash = version.find("-windows"); dash != std::string::npos) version.erase(dash);
-    const std::string subtitle =
-        std::string(T("Port nativo para Windows", "Native Windows port")) + (version.empty() ? "" : "  ·  " + version);
-    dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.92f, ImVec2(x + 2 * s, win.y + 10.0f * s + title_size + 2 * s),
-                Col(kGrey), subtitle.c_str());
+// The two-column layout: the tabs in a black column on the left (Sidebar), the banner and the
+// open tab on the right (Banner, ContentBackground).
 
-    // Right: the game's state and edition.
+struct NavTab {
+    const char* icon;
+    const char* label;
+    const char* id;
+};
+std::string g_tab = "play";  // the open tab (g_goto_tab switches it)
+
+/// The game's state and edition, as pills: (text with the icon before two spaces, colour).
+std::vector<std::pair<std::string, ImVec4>> StatusPills() {
+    App& a = g_app;
     std::vector<std::pair<std::string, ImVec4>> pills;
     const std::string edition = EditionLabel();
     if (a.game_running) pills.emplace_back(std::string(ICON_PLAY "  ") + T("En juego", "Playing"), kGreen);
@@ -3721,27 +3696,133 @@ void Header() {
         pills.emplace_back(std::string(ICON_CHECK "  ") + T("Listo para jugar", "Ready to play"), kGreen);
     else pills.emplace_back(std::string(ICON_WARN "  ") + T("Falta preparar el juego", "Game not set up"), kYellow);
     if (!edition.empty()) pills.emplace_back(std::string(ICON_GLOBE "  ") + edition, kBlue);
-    float rx = win.x + width - pad;
-    const ImVec2 pp(8.0f * s, 4.0f * s);
+    return pills;
+}
+
+void Sidebar(const NavTab* tabs, size_t count, float width) {
+    App& a = g_app;
+    const float s = g_ui_scale;
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 1));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f * s, 20.0f * s));
+    ImGui::BeginChild("sidebar", ImVec2(width, 0), ImGuiChildFlags_AlwaysUseWindowPadding,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 win = ImGui::GetWindowPos();
+    const float win_h = ImGui::GetWindowSize().y;
+    const float right = win.x + width;
+    // A thin edge between the columns.
+    dl->AddLine(ImVec2(right - 1, win.y), ImVec2(right - 1, win.y + win_h), Col(kBorder));
+
+    // The logo, the title and the version.
+    const float logo = 44.0f * s;
+    ImVec2 at = ImGui::GetCursorScreenPos();
+    float x = at.x + 6.0f * s;
+    if (g_logo) {
+        dl->AddImage(ImTextureRef(ImTextureID(reinterpret_cast<intptr_t>(g_logo))), ImVec2(x, at.y), ImVec2(x + logo, at.y + logo));
+        x += logo + 12.0f * s;
+    }
+    ImFont* title_font = g_font_title ? g_font_title : ImGui::GetFont();
+    const float title_size = 17.0f * s;
+    dl->AddText(title_font, title_size, ImVec2(x, at.y + 2.0f * s), IM_COL32(0xFF, 0xFF, 0xFF, 0xFF), "Deadpool PS4 Port");
+    std::string version = a.version;
+    if (const auto dash = version.find("-windows"); dash != std::string::npos) version.erase(dash);
+    const std::string subtitle =
+        std::string(T("Port nativo", "Native Windows port")) + (version.empty() ? "" : " · " + version);
+    dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.78f, ImVec2(x, at.y + 4.0f * s + title_size),
+                Col(kGrey), subtitle.c_str());
+    ImGui::Dummy(ImVec2(0, logo + 14.0f * s));
+    at = ImGui::GetCursorScreenPos();
+    dl->AddRectFilled(at, ImVec2(right - 14.0f * s, at.y + 2.0f * s), Col(kRedButton), 1.0f * s);
+    ImGui::Dummy(ImVec2(0, 16.0f * s));
+
+    // The tabs: the open one red, rounded on the left and running to the column's edge.
+    const float row = 44.0f * s;
+    for (size_t i = 0; i < count; ++i) {
+        const NavTab& t = tabs[i];
+        const bool on = g_tab == t.id;
+        ImGui::PushID(t.id);
+        at = ImGui::GetCursorScreenPos();
+        const float w = right - at.x;
+        const bool clicked = ImGui::InvisibleButton("##tab", ImVec2(w, row));
+        const bool hovered = ImGui::IsItemHovered();
+        if (clicked) g_tab = t.id;
+        if (on) {
+            dl->AddRectFilled(at, ImVec2(right, at.y + row), Col(kRedButton), 10.0f * s, ImDrawFlags_RoundCornersLeft);
+        } else if (hovered) {
+            dl->AddRectFilled(at, ImVec2(right - 14.0f * s, at.y + row), IM_COL32(0xFF, 0xFF, 0xFF, 0x18), 10.0f * s);
+        }
+        const float line = ImGui::GetTextLineHeight();
+        const ImU32 white = IM_COL32(0xFF, 0xFF, 0xFF, on || hovered ? 0xFF : 0xDC);
+        dl->AddText(ImVec2(at.x + 16.0f * s, at.y + (row - line) * 0.5f), white, t.icon);
+        ImFont* label_font = on && g_font_heading ? g_font_heading : ImGui::GetFont();
+        dl->AddText(label_font, ImGui::GetFontSize(), ImVec2(at.x + 16.0f * s + ImGui::GetFontSize() * 1.9f, at.y + (row - line) * 0.5f),
+                    white, t.label);
+        ImGui::PopID();
+        ImGui::Dummy(ImVec2(0, 2.0f * s));
+    }
+
+    // The game's state at the bottom.
+    const auto pills = StatusPills();
+    const ImVec2 pp(10.0f * s, 5.0f * s);
     const float line = ImGui::GetTextLineHeight();
+    float y = win.y + win_h - 20.0f * s - float(pills.size()) * (line + pp.y * 2 + 8.0f * s);
     for (const auto& [text, color] : pills) {
+        const ImVec2 a0(win.x + 20.0f * s, y);
         const ImVec2 t = ImGui::CalcTextSize(text.c_str());
-        const ImVec2 a0(rx - t.x - pp.x * 2, win.y + (height - line - pp.y * 2) * 0.5f);
-        const ImVec2 a1(rx, a0.y + line + pp.y * 2);
-        dl->AddRectFilled(a0, a1, Col(color, 0.16f), 99.0f);
-        dl->AddRect(a0, a1, Col(color, 0.8f), 99.0f, 0, 1.0f * s);
-        // The icon (before the two spaces) in white, the words in the pill's colour.
+        const ImVec2 a1(std::min(a0.x + t.x + pp.x * 2, right - 14.0f * s), y + line + pp.y * 2);
+        dl->AddRectFilled(a0, a1, Col(color, 0.14f), 99.0f);
+        dl->AddRect(a0, a1, Col(color, 0.85f), 99.0f, 0, 1.0f * s);
+        dl->PushClipRect(a0, a1, true);
         if (const auto split = text.find("  "); split != std::string::npos) {
             const std::string icon = text.substr(0, split);
             dl->AddText(ImVec2(a0.x + pp.x, a0.y + pp.y), IM_COL32(0xFF, 0xFF, 0xFF, 0xFF), icon.c_str());
-            dl->AddText(ImVec2(a0.x + pp.x + ImGui::CalcTextSize(icon.c_str()).x, a0.y + pp.y), Col(color),
-                        text.c_str() + split);
+            dl->AddText(ImVec2(a0.x + pp.x + ImGui::CalcTextSize(icon.c_str()).x, a0.y + pp.y), Col(color), text.c_str() + split);
         } else {
             dl->AddText(ImVec2(a0.x + pp.x, a0.y + pp.y), Col(color), text.c_str());
         }
-        rx = a0.x - 8.0f * s;
+        dl->PopClipRect();
+        y = a1.y + 8.0f * s;
     }
-    ImGui::SetCursorScreenPos(ImVec2(win.x + ImGui::GetStyle().WindowPadding.x, win.y + height + 10.0f * s));
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+}
+
+/// The banner strip at the top of the right column (art\banner.png, else a dark gradient), with a
+/// red line under it. Returns its height.
+float Banner() {
+    const float s = g_ui_scale;
+    const ImVec2 win = ImGui::GetCursorScreenPos();
+    const float width = ImGui::GetContentRegionAvail().x;
+    const float height = 112.0f * s;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (g_banner) {
+        const auto [uv0, uv1] = CoverUv(g_banner_size, ImVec2(width, height));
+        dl->AddImage(ImTextureRef(ImTextureID(reinterpret_cast<intptr_t>(g_banner))), win,
+                     ImVec2(win.x + width, win.y + height), uv0, uv1);
+    } else {
+        const ImU32 left = IM_COL32(0x2A, 0x0A, 0x0E, 0xFF), right = IM_COL32(0x0B, 0x0B, 0x0F, 0xFF);
+        dl->AddRectFilledMultiColor(win, ImVec2(win.x + width, win.y + height), left, right, right, left);
+        ImFont* title_font = g_font_title ? g_font_title : ImGui::GetFont();
+        const float size = 30.0f * s;
+        dl->AddText(title_font, size, ImVec2(win.x + 28.0f * s, win.y + (height - size) * 0.5f),
+                    IM_COL32(0xFF, 0xFF, 0xFF, 0xFF), "Deadpool PS4 Port");
+    }
+    dl->AddRectFilled(ImVec2(win.x, win.y + height - 3.0f * s), ImVec2(win.x + width, win.y + height), Col(kRedButton));
+    ImGui::Dummy(ImVec2(width, height));
+    return height;
+}
+
+/// art\background.png behind the open tab (cropped to fill), under an 80% black tint; black
+/// without it.
+void ContentBackground(ImVec2 at, ImVec2 size) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (g_background) {
+        const auto [uv0, uv1] = CoverUv(g_background_size, size);
+        dl->AddImage(ImTextureRef(ImTextureID(reinterpret_cast<intptr_t>(g_background))), at,
+                     ImVec2(at.x + size.x, at.y + size.y), uv0, uv1);
+        dl->AddRectFilled(at, ImVec2(at.x + size.x, at.y + size.y), IM_COL32(0, 0, 0, 0xCC));
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -3789,23 +3870,42 @@ void Frame() {
     App& a = g_app;
     PollJobs();
     const ImGuiViewport* vp = ImGui::GetMainViewport();
-    if (g_background) {
-        // art\background.png behind everything, cropped to fill; the window over it is see-through.
-        const auto [uv0, uv1] = CoverUv(g_background_size, vp->WorkSize);
-        ImGui::GetBackgroundDrawList()->AddImage(ImTextureRef(ImTextureID(reinterpret_cast<intptr_t>(g_background))),
-                                                 vp->WorkPos, ImVec2(vp->WorkPos.x + vp->WorkSize.x, vp->WorkPos.y + vp->WorkSize.y),
-                                                 uv0, uv1);
-        ImVec4 bg = kBg;
-        bg.w = 0.86f;
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, bg);
-    }
+    const float s = g_ui_scale;
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::Begin("launcher", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus);
-    if (g_background) ImGui::PopStyleColor();
-    Header();
+    ImGui::PopStyleVar();
+    if (g_goto_tab) {
+        g_tab = g_goto_tab;
+        g_goto_tab = nullptr;
+    }
+    static const NavTab tabs[] = {
+        {ICON_PLAY, "", "play"},       {ICON_SETTINGS, "", "settings"}, {ICON_GAMEPAD, "", "controls"},
+        {ICON_STAR, "", "achievements"}, {ICON_PUZZLE, "", "patches"},  {ICON_SAVE, "", "saves"},
+        {ICON_PACKAGE, "", "dlc"},     {ICON_TOOLS, "", "tools"},
+    };
+    // Labels in the launcher's language (T picks at run time).
+    NavTab labelled[std::size(tabs)];
+    const char* labels[] = {T("Jugar", "Play"),        T("Ajustes", "Settings"), T("Controles", "Controls"),
+                            T("Logros", "Achievements"), T("Parches", "Patches"), T("Guardados", "Saves"),
+                            "DLC",                      T("Herramientas", "Tools")};
+    for (size_t i = 0; i < std::size(tabs); ++i) labelled[i] = {tabs[i].icon, labels[i], tabs[i].id};
+
+    const float side = 232.0f * s;
+    Sidebar(labelled, std::size(labelled), side);
+    ImGui::SameLine(0.0f, 0.0f);
+
+    ImGui::BeginChild("main", ImVec2(0, 0), 0, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    Banner();
+    const ImVec2 content_at = ImGui::GetCursorScreenPos();
+    const ImVec2 content_size = ImGui::GetContentRegionAvail();
+    ContentBackground(content_at, content_size);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f * s, 20.0f * s));
+    ImGui::BeginChild("content", ImVec2(0, 0), ImGuiChildFlags_AlwaysUseWindowPadding);
+    ImGui::PopStyleVar();
 
     if (!a.notice.empty()) {
         BeginCard("notice");
@@ -3820,66 +3920,18 @@ void Frame() {
     }
 
     bool on_controls = false;
-    if (ImGui::BeginTabBar("tabs")) {
-        const char* go = g_goto_tab;
-        g_goto_tab = nullptr;
-        auto tab = [go](const char* icon, const char* label, const char* id) {
-            const std::string text = std::string(icon) + "  " + label + "###" + id;
-            const bool select = go && std::strcmp(go, id) == 0;
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));  // white on the red tabs
-            const bool open = ImGui::BeginTabItem(text.c_str(), nullptr, select ? ImGuiTabItemFlags_SetSelected : 0);
-            ImGui::PopStyleColor();
-            return open;
-        };
-        if (tab(ICON_PLAY, T("Jugar", "Play"), "play")) {
-            ImGui::BeginChild("play");
-            PlayTab();
-            ImGui::EndChild();
-            ImGui::EndTabItem();
-        }
-        if (tab(ICON_SETTINGS, T("Ajustes", "Settings"), "settings")) {
-            ImGui::BeginChild("settings");
-            SettingsTab();
-            ImGui::EndChild();
-            ImGui::EndTabItem();
-        }
-        if (tab(ICON_GAMEPAD, T("Controles", "Controls"), "controls")) {
-            on_controls = true;
-            ControlsTab();
-            ImGui::EndTabItem();
-        }
-        if (tab(ICON_STAR, T("Logros", "Achievements"), "achievements")) {
-            ImGui::BeginChild("achievements");
-            TrophiesTab();
-            ImGui::EndChild();
-            ImGui::EndTabItem();
-        }
-        if (tab(ICON_PUZZLE, T("Parches", "Patches"), "patches")) {
-            ImGui::BeginChild("patches");
-            PatchesTab();
-            ImGui::EndChild();
-            ImGui::EndTabItem();
-        }
-        if (tab(ICON_SAVE, T("Guardados", "Saves"), "saves")) {
-            ImGui::BeginChild("saves");
-            SavesTab();
-            ImGui::EndChild();
-            ImGui::EndTabItem();
-        }
-        if (tab(ICON_PACKAGE, "DLC", "dlc")) {
-            ImGui::BeginChild("dlc");
-            DlcTab();
-            ImGui::EndChild();
-            ImGui::EndTabItem();
-        }
-        if (tab(ICON_TOOLS, T("Herramientas", "Tools"), "tools")) {
-            ImGui::BeginChild("tools");
-            ToolsTab();
-            ImGui::EndChild();
-            ImGui::EndTabItem();
-        }
-        ImGui::EndTabBar();
-    }
+    if (g_tab == "settings") SettingsTab();
+    else if (g_tab == "controls") {
+        on_controls = true;
+        ControlsTab();
+    } else if (g_tab == "achievements") TrophiesTab();
+    else if (g_tab == "patches") PatchesTab();
+    else if (g_tab == "saves") SavesTab();
+    else if (g_tab == "dlc") DlcTab();
+    else if (g_tab == "tools") ToolsTab();
+    else PlayTab();
+    ImGui::EndChild();  // content
+    ImGui::EndChild();  // main
     if (!on_controls) LeaveControls();
 
     SaveConfirmations();
