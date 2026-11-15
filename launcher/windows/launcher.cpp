@@ -1322,14 +1322,15 @@ const ImVec4 kRed{1.0f, 0.42f, 0.40f, 1.0f};
 const ImVec4 kYellow{1.0f, 0.78f, 0.30f, 1.0f};
 const ImVec4 kGrey{0.58f, 0.61f, 0.70f, 1.0f};
 const ImVec4 kText{0.92f, 0.93f, 0.96f, 1.0f};
-const ImVec4 kAccent{1.0f, 0.54f, 0.12f, 1.0f};        // #FF8A1F
+// The accent (slider grabs, highlights, the controller view): Deadpool red, was orange.
+const ImVec4 kAccent{0.84f, 0.15f, 0.18f, 1.0f};        // #D7262E
 // Deadpool red: the Play button and the tabs.
 const ImVec4 kRedButton{0.84f, 0.15f, 0.18f, 1.0f};        // #D7262E
 const ImVec4 kRedButtonHover{0.91f, 0.26f, 0.29f, 1.0f};   // #E8434A
 const ImVec4 kRedButtonActive{0.69f, 0.12f, 0.15f, 1.0f};  // #B01E25
 const ImVec4 kCardBlack{0.0f, 0.0f, 0.0f, 0.8f};           // cards and the log over the background art
-const ImVec4 kAccentHover{1.0f, 0.63f, 0.26f, 1.0f};
-const ImVec4 kAccentActive{0.91f, 0.45f, 0.06f, 1.0f};
+const ImVec4 kAccentHover{0.91f, 0.26f, 0.29f, 1.0f};   // #E8434A
+const ImVec4 kAccentActive{0.69f, 0.12f, 0.15f, 1.0f};  // #B01E25
 const ImVec4 kBlue{0.30f, 0.64f, 1.0f, 1.0f};
 const ImVec4 kBg{0.067f, 0.075f, 0.102f, 1.0f};         // #11131A
 const ImVec4 kPanel{0.098f, 0.110f, 0.149f, 1.0f};      // #191C26
@@ -1533,7 +1534,7 @@ void ApplyTheme(float scale) {
     c[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(1, 1, 1, 1);
     c[ImGuiCol_PlotHistogram] = kAccent;
     c[ImGuiCol_PlotHistogramHovered] = kAccentHover;
-    c[ImGuiCol_TableHeaderBg] = kFrame;
+    c[ImGuiCol_TableHeaderBg] = kRedButton;  // table headers (Action / Buttons): red, white labels
     c[ImGuiCol_TableBorderStrong] = kBorder;
     c[ImGuiCol_TableBorderLight] = ImVec4(0.15f, 0.17f, 0.23f, 1.0f);
     c[ImGuiCol_TableRowBg] = ImVec4(0, 0, 0, 0);
