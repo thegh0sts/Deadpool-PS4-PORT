@@ -4,7 +4,9 @@
 #ifndef _WIN32
 #include <dlfcn.h>
 #endif
+#include <format>
 #include <map>
+#include <string>
 #include <unordered_set>
 #include <xxhash.h>
 #include "video_core/renderer_vulkan/ui_composition.h"
@@ -2500,6 +2502,25 @@ void Rasterizer::ResolveVertexBuffers(const GraphicsPipeline* pipeline,
                 NoteBufferStats("vb", slot,
                                 vb.base_address, memory->ClampRangeSize(vb.base_address, vb.GetSize()),
                                 u32(vb.GetStride()));
+                // deadpool-port: the stream's format, and small streams (UI quads) in full.
+                const u64 size = memory->ClampRangeSize(vb.base_address, vb.GetSize());
+                char note[96];
+                std::snprintf(note, sizeof(note), " dfmt %u nfmt %u vk %s", u32(vb.GetDataFmt()),
+                              u32(vb.GetNumberFmt()),
+                              vk::to_string(LiverpoolToVK::SurfaceFormat(vb.GetDataFmt(),
+                                                                         vb.GetNumberFmt()))
+                                  .c_str());
+                FrameCapture::Note(note);
+                if (slot == 0 && size <= 256) {
+                    const auto* w = reinterpret_cast<const u32*>(vb.base_address);
+                    std::string dump = "\n      data:";
+                    for (u64 i = 0; i < size / 4; ++i) {
+                        char word[12];
+                        std::snprintf(word, sizeof(word), " %08x", w[i]);
+                        dump += word;
+                    }
+                    FrameCapture::Note(dump.c_str());
+                }
             }
             ++slot;
         }
@@ -2851,6 +2872,18 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
         const RingBinding* ring = num_ring_stages ? FindRingBinding(stage, buffer_index) : nullptr;
         if (ring) {
             // Copied by the GPU command thread into the constant ring (read-only).
+            // deadpool-port: small constant buffers of every stage in the frame capture.
+            if (FrameCapture::Active() && !desc.IsSpecial() && ring->address &&
+                ring->size <= 256 && memory->IsValidGpuMapping(ring->address, 0)) {
+                const auto* f = reinterpret_cast<const float*>(ring->address);
+                std::string dump = std::format("\n    {} const {} at {:#x} size {}:",
+                                               stage.sw_stage == Shader::SwStage::Vertex ? "vs" : "ps/other",
+                                               buffer_index, ring->address, ring->size);
+                for (u64 i = 0; i < ring->size / 4; ++i) {
+                    dump += std::format(" {:.4g}", f[i]);
+                }
+                FrameCapture::Note(dump.c_str());
+            }
             if (!desc.IsSpecial()) {
                 if (ring->size == 864 && gbuffer_draw &&
                     memory->IsValidGpuMapping(ring->address, 0)) {
