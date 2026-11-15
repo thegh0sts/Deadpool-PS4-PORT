@@ -2467,6 +2467,21 @@ void LeaveControls() {
 }
 
 /// SDL's gamepads while the launcher shows them; never while the game runs (it has them).
+/// SDL3.dll: bin\ (portable package), else MSYS2's CLANG64 (a source build runs with its DLLs,
+/// as run.py does; MSYS2_ROOT or C:\msys64).
+fs::path SdlDll() {
+    App& a = g_app;
+    std::error_code ec;
+    const fs::path own = a.bin / L"SDL3.dll";
+    if (fs::is_regular_file(own, ec)) return own;
+    wchar_t root[MAX_PATH];
+    const DWORD n = GetEnvironmentVariableW(L"MSYS2_ROOT", root, MAX_PATH);
+    const fs::path msys = (n > 0 && n < MAX_PATH) ? fs::path(root) : fs::path(L"C:\\msys64");
+    const fs::path clang64 = msys / L"clang64" / L"bin" / L"SDL3.dll";
+    if (fs::is_regular_file(clang64, ec)) return clang64;
+    return own;
+}
+
 bool EnsurePads() {
     App& a = g_app;
     if (a.game_running) {
@@ -2476,7 +2491,7 @@ bool EnsurePads() {
     if (Pads::Running()) return true;
     const double now = ImGui::GetTime();
     if (now < g_pads_retry) return false;
-    if (!Pads::Start((a.bin / L"SDL3.dll").wstring())) {
+    if (!Pads::Start(SdlDll().wstring())) {
         g_pads_retry = now + 3.0;
         return false;
     }
@@ -3815,6 +3830,18 @@ void LoadState() {
         }
     }
     a.python = FindPython(a.root);
+    // A source build (bin = out\) runs with MSYS2's CLANG64 DLLs (SDL3, FFmpeg): the tools the
+    // launcher starts (the display and gamepad probes, the game) find them on PATH.
+    {
+        const fs::path sdl = SdlDll();
+        std::error_code ec;
+        if (sdl.parent_path() != a.bin && fs::is_regular_file(sdl, ec)) {
+            const DWORD size = GetEnvironmentVariableW(L"PATH", nullptr, 0);
+            std::wstring path(size, L'\0');
+            if (size) path.resize(GetEnvironmentVariableW(L"PATH", path.data(), size));
+            SetEnvironmentVariableW(L"PATH", (sdl.parent_path().wstring() + L";" + path).c_str());
+        }
+    }
     // The portable package ships bbport.default.ini (an update unzipped over it keeps bbport.ini).
     if (!fs::exists(GameIni(), ec) && fs::is_regular_file(a.root / L"bbport.default.ini", ec)) {
         fs::copy_file(a.root / L"bbport.default.ini", GameIni(), ec);
