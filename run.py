@@ -180,7 +180,16 @@ def main():
     say(f'--- SacredFire launch {time.strftime("%Y-%m-%d %H:%M:%S")}{" (restart)" if restarted else ""}')
 
     # BB_GAME_DIR: the dumped game (Deadpool EU CUSA03528 01.00).
-    game = Path(env.get('BB_GAME_DIR', PORT / 'orig' / TITLE_ID))
+    # Without it: orig/CUSA03528, else the first Deadpool.PS4-* folder beside the port (how the
+    # dumps are kept next to it) that has an eboot.bin.
+    if 'BB_GAME_DIR' in env:
+        game = Path(env['BB_GAME_DIR'])
+    else:
+        game = PORT / 'orig' / TITLE_ID
+        if not (game / 'eboot.bin').is_file():
+            found = sorted(p for p in PORT.glob('Deadpool.PS4-*') if (p / 'eboot.bin').is_file())
+            if found:
+                game = found[0]
     if not (game / 'eboot.bin').is_file():
         if (game / 'Image0' / 'eboot.bin').is_file():
             fail(f'{game} has the PS4 PKG Tool layout (Image0 and Sc0): prepare it in the launcher first.')

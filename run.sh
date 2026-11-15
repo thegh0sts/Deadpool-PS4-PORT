@@ -48,6 +48,12 @@ if [[ -z ${PYTHON:-} ]]; then echo 'Install Python 3 or set PYTHON.' >&2; exit 1
 # BB_GAME_DIR: the game's folder (eboot.bin, sce_module, ...); default: orig/CUSA03528, the
 # dumped Deadpool EU 01.00 (or a link to it).
 game=${BB_GAME_DIR:-orig/CUSA03528}
+if [[ -z ${BB_GAME_DIR:-} && ! -f $game/eboot.bin ]]; then
+    # Else the first Deadpool.PS4-* folder beside the port with an eboot.bin (where the dumps are kept).
+    for candidate in Deadpool.PS4-*/; do
+        if [[ -f ${candidate}eboot.bin ]]; then game=${candidate%/}; break; fi
+    done
+fi
 if [[ ! -f $game/eboot.bin ]]; then echo "No eboot.bin in $game (set BB_GAME_DIR)." >&2; exit 1; fi
 # The game check (scripts/game_check.py) compares the executable image with the supported one
 # (Deadpool EU CUSA03528 01.00) and names the profile the runtime reads.

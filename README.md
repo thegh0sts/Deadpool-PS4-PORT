@@ -61,7 +61,7 @@ BB_GAME_DIR=/path/to/CUSA03528 bash run.sh
 ```
 
 `run.sh`/`run.py` check the game, prepare the image (`out/`), compile the selected patches and
-start the game. The game folder defaults to `orig/CUSA03528`. Saves and the shader cache go to
+start the game. The game folder defaults to `orig/CUSA03528`, else a `Deadpool.PS4-*` folder beside the port (such as `Deadpool.PS4-EU`). Saves and the shader cache go to
 `user/`, settings to `bbport.ini`; `BB_DATA_DIR` moves all of them.
 
 Before the first start, `python3 tools/module_imports.py /path/to/CUSA03528` lists the imports
