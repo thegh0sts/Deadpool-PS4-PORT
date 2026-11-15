@@ -112,17 +112,18 @@ class SignatureTests(unittest.TestCase):
 
 
 class GamePatchTests(unittest.TestCase):
-    def test_bundled_patches(self):
-        # Only the frame rate unlock, off unless asked for (run.py --enable with BB_FPS=uncap).
+    def test_no_bundled_patch_files(self):
+        # The frame rate unlock is built in (BUILTIN_PATCHES), not a patch file in the list.
         self.assertEqual(GAME_PATCH_KEYS, {})
-        found = external_patches(ROOT / 'patches')
-        self.assertEqual([key for key, _, _ in found], ['Deadpool.xml/Unlock frame rate'])
-        self.assertEqual(external_selection(found, None), [])
-        selected = external_selection(found, None, extra=['Deadpool.xml/Unlock frame rate'])
-        self.assertEqual([key for key, _, _ in selected], ['Deadpool.xml/Unlock frame rate'])
-        line = next(selected[0][2].iter('Line'))
-        self.assertEqual(int(line.get('Address'), 0) - EBOOT_BASE, 0x78848e)
-        self.assertEqual(encode(line), bytes.fromhex('e9f500000090'))
+        self.assertEqual(external_patches(ROOT / 'patches'), [])
+
+    def test_builtin_unlock_fps(self):
+        from patches import BUILTIN_PATCHES
+        (address, data, signature, shift), = BUILTIN_PATCHES['unlock_fps']
+        self.assertEqual(address - EBOOT_BASE, 0x78848e)
+        self.assertEqual(data, bytes.fromhex('e9f500000090'))
+        # The signature covers the patched jbe at its offset.
+        self.assertEqual(bytes.fromhex(signature.replace(' ', ''))[shift:shift + 2], bytes.fromhex('0f86'))
 
     def test_ini_keys_select_patches(self):
         with tempfile.TemporaryDirectory() as tmp:

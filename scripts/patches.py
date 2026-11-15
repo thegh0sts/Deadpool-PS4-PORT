@@ -9,7 +9,7 @@ the write goes, from the signature's start). The write goes to Address when the 
 there; otherwise to the one place in the executable where it matches. No match, or more than one:
 the patch is skipped whole, with a log line.
 
-Patch files: patches/*.xml in the checkout (Deadpool.xml: the frame rate unlock) and any folder named with
+Patch files: patches/*.xml in the checkout (none bundled; the port's own fixes are BUILTIN_PATCHES) and any folder named with
 --patches-dir. A patch is applied when the in-game menu or the launcher turned its bbport.ini key
 on (GAME_PATCH_KEYS), when patches.json lists it under "enabled", or when its file marks it
 isEnabled and patches.json does not disable it.
@@ -27,6 +27,16 @@ TITLE_ID='CUSA03528'
 APP_VERSION='01.00'
 # bbport.ini keys (the in-game menu, the launcher) -> "<file>/<patch name>". None for Deadpool yet.
 GAME_PATCH_KEYS={}
+# The port's own fixes, applied with --builtin NAME (not listed as patches in the launcher).
+# name -> [(Address, bytes, Signature, SignatureOffset)], as a patch XML line would give them.
+BUILTIN_PATCHES={
+    # Unreal Engine 3's FEngineLoop::Tick sleeps until 1 / GetMaxTickRate() (30 for Deadpool)
+    # has passed since the last frame: "jbe <skip the wait>" after "if (MaxTickRate > 0)" becomes
+    # a jmp. run.py/run.sh with BB_FPS=uncap (the launcher's "Unlock the frame rate"), which
+    # also ignores the game's flip rate.
+    'unlock_fps': [(0x00b8848e, bytes.fromhex('e9f500000090'),
+                    'ff 90 a8 02 00 00 c5 f0 57 c9 c5 f8 2e c1 0f 86 f4 00 00 00', 14)],
+}
 
 
 def read_settings(path):
@@ -158,6 +168,30 @@ def compile_external(selected, segments, elf=None):
     return writes
 
 
+def compile_builtin(names, segments, elf):
+    """Writes of the named BUILTIN_PATCHES (an unknown name, or a site not found: skipped)."""
+    writes=[]
+    for name in names:
+        lines=BUILTIN_PATCHES.get(name)
+        if lines is None:
+            print(f'Patches: no built-in patch {name!r}',file=sys.stderr)
+            continue
+        try:
+            ours=[]
+            for address,data,signature,shift in lines:
+                line={'Address':hex(address),'Signature':signature,'SignatureOffset':str(shift)}
+                offset=locate(line,address-EBOOT_BASE,elf)
+                if not any(start<=offset and offset+len(data)<=end for start,end in segments):
+                    raise ValueError(f'address {address:#x} is outside the eboot')
+                ours.append((offset,data))
+        except ValueError as error:
+            print(f'Patches: skipped built-in {name}: {error}',file=sys.stderr)
+            continue
+        writes+=ours
+        print(f'Patches: built-in {name} ({len(ours)} writes)')
+    return writes
+
+
 def write_blob(out, writes):
     """out/patches.bin (BBPATCH2: the patch base, so the loader can rebase pointers written into
     relocated slots)."""
@@ -176,14 +210,17 @@ def main():
     p.add_argument('--out',type=Path,default=root/'out')
     p.add_argument('--settings',type=Path,default=root/'bbport.ini')
     p.add_argument('--enable',action='append',default=[],metavar='KEY',
-                   help='also apply this patch ("<file>/<patch name>"; run.py: BB_FPS=uncap)')
+                   help='also apply this patch file entry ("<file>/<patch name>")')
+    p.add_argument('--builtin',action='append',default=[],metavar='NAME',
+                   help='apply a built-in fix (BUILTIN_PATCHES; run.py: unlock_fps with BB_FPS=uncap)')
     p.add_argument('--external-only',action='store_true',help='accepted for older callers (the only mode)')
     a=p.parse_args()
     elf=(a.out/'eboot.elf').read_bytes()
     segments=eboot_segments(elf)
     found=external_patches(a.patches_dir,a.app_version,a.title_id)
     settings=read_settings(a.settings)
-    writes=compile_external(external_selection(found,a.patches_config,settings,a.enable),segments,elf)
+    writes=compile_builtin(a.builtin,segments,elf)
+    writes+=compile_external(external_selection(found,a.patches_config,settings,a.enable),segments,elf)
     write_blob(a.out,writes)
     print(f'Patches: {len(writes)} writes from {len(found)} available patches')
 

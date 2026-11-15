@@ -77,14 +77,14 @@ fi
 # SacredFire: symbol names for this eboot's host-side imports (shadPS4's aerolib list, fetched once).
 "$PYTHON" tools/gen_import_names.py --out "$out"
 "$PYTHON" scripts/content_profile.py "$game" --out "$out" --sku "${BB_CONTENT_SKU:-full}"
-# Patches: shadPS4-format XML files in patches/ (patches/Deadpool.xml: the frame rate unlock, on with BB_FPS=uncap), chosen in the
+# Patches: shadPS4-format XML files in patches/ (none bundled for Deadpool), chosen in the
 # in-game menu (bbport.ini patch_* keys) or patches.json; BB_PATCHES_DIR adds another folder.
 fps=${BB_FPS:-30}
-# BB_FPS=uncap: the engine's own 30 FPS limiter is patched out too (patches/Deadpool.xml).
-fps_patch=; [[ $fps == uncap ]] && fps_patch='Deadpool.xml/Unlock frame rate'
+# BB_FPS=uncap: the engine's own 30 FPS limiter is patched out too (scripts/patches.py unlock_fps).
+fps_patch=; [[ $fps == uncap ]] && fps_patch=unlock_fps
 "$PYTHON" scripts/patches.py --patches-dir "${BB_PATCHES_DIR:-patches}" --patches-config "${BB_PATCHES_CONFIG:-$data/patches.json}" \
     --app-version "$app_version" --title-id "$title_id" --out "$out" --settings "$BB_CONFIG" \
-    ${fps_patch:+--enable "$fps_patch"}
+    ${fps_patch:+--builtin "$fps_patch"}
 patch_args=(--patches "$out/patches.bin")
 # BB_NEO=1: PS4 Pro mode (sceKernelIsNeoMode, 7-CPU mode, 5568 MiB direct memory); the game then
 # picks its Pro rendering path. Off by default: the Steam Deck is closer to a base PS4.
