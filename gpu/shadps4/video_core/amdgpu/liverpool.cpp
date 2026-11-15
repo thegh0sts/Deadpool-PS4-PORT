@@ -1559,7 +1559,12 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                                                                  results, sizeof(*results));
                             }
                         }
-                        pixel_counter += OcclusionCounterStep;
+                        // deadpool-port experiment (second number in BB_TOGGLE_FILE, bit 1):
+                        // every occlusion query reports nothing visible instead of everything.
+                        // The counter is a stand-in, not a real Vulkan occlusion query: UE3's
+                        // light coronas and lens flares, faded by these queries, are drawn at full
+                        // strength even behind walls.
+                        pixel_counter += BbToggle::Experiment(1) ? 0 : OcclusionCounterStep;
                     }
                 }
                 break;
