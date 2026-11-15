@@ -12,8 +12,9 @@
  * the wait is skipped. A one-byte store cannot be seen half-written by the game thread.
  *
  * The level comes from the files the game opens: a map package is <name>_m.xxx (lightmaps
- * _m_LM, text _m_LOC_int). UI_FrontEnd_m / UI_FrontEnd_xtra_m are the main menu; any other map
- * is gameplay. Until the first map (logos, intro) the wait stays on. */
+ * _m_LM, text _m_LOC_int). UI_FrontEnd_m, UI_FrontEnd_xtra_m and the menu's backdrop maps
+ * (UI_Apartment_ART_m, UI_Centerpiec_ART_m) are the main menu; other UI_ maps change nothing;
+ * any other map is gameplay. Until the first map (logos, intro) the wait stays on. */
 #include "runtime.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -123,7 +124,14 @@ void runtime_fps_note_open(const char *guest) {
     if (!guest || !init() || !site) return;
     char name[256];
     if (!map_name(guest,name,sizeof(name))) return;
-    int game=strncmp(name,"ui_frontend",11)!=0;
+    /* The menu: UI_FrontEnd_m, UI_FrontEnd_xtra_m and its backdrops UI_Apartment_ART_m,
+     * UI_Centerpiec_ART_m. Other UI_ maps (UI_Death_m, UI_Challenge*_m) are streamed in during
+     * play and change nothing. */
+    static const char *const menu[]={"ui_frontend","ui_apartment","ui_centerpiec"};
+    int game=1;
+    for (size_t i=0;i<sizeof(menu)/sizeof(menu[0]);++i)
+        if (!strncmp(name,menu[i],strlen(menu[i]))) game=0;
+    if (game && !strncmp(name,"ui_",3)) return;
     if (__atomic_exchange_n(&unlocked,game,__ATOMIC_SEQ_CST)==game) return;
     write_site(game ? JNO : JBE);
     printf("FPS auto: %s (%s)\n",game ? "gameplay, unlocked" : "main menu, 30 FPS",name);

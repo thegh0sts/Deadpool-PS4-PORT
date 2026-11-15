@@ -165,7 +165,8 @@ Skipping UE3's FEngineLoop::Tick wait (`unlock_fps`) stretches and skews the mai
 animations. `src/runtime_fps.c` switches that wait live instead: the `jbe` after GetMaxTickRate
 (image+0x78848f, located by signature) becomes `jno` (always taken after ucomiss, so no wait) in
 gameplay and goes back to `jbe` in the main menu. The level comes from the map packages the game
-opens (`<name>_m.xxx`): `UI_FrontEnd_m` / `UI_FrontEnd_xtra_m` are the menu, any other map is
-gameplay. The log says `FPS auto: ...` on each switch. Untested: the pause menu and HUD menus
+opens (`<name>_m.xxx`): `UI_FrontEnd_m`, `UI_FrontEnd_xtra_m` and the menu's backdrops `UI_Apartment_ART_m` /
+`UI_Centerpiec_ART_m` are the menu; other `UI_` maps (death, challenge screens) change nothing; any
+other map is gameplay. The log says `FPS auto: ...` on each switch. Untested: the pause menu and HUD menus
 (no level load there), and the in-game frame pacing of cutscenes. Other modes: `uncap` (always
 unlocked), `60` (illusion's flip-rate patch), `30`.
