@@ -1798,8 +1798,8 @@ void SettingsTab() {
 
     Section(T("Mando", "Controller"));
     ImGui::TextColored(kGrey, "%s  %s", ICON_GAMEPAD,
-                       T("Los mandos, los jugadores y los botones están en la pestaña Controles.",
-                         "Controllers, players and buttons are in the Controls tab."));
+                       T("El mando y los botones están en la pestaña Controles.",
+                         "The controller and buttons are in the Controls tab."));
     ImGui::SameLine();
     if (ImGui::SmallButton(T("Ir a Controles", "Open Controls"))) g_goto_tab = "controls";
 
@@ -2498,6 +2498,9 @@ bool EnsurePads() {
     return true;
 }
 
+/// Players the Controls tab offers a controller for (Deadpool is single-player).
+constexpr int kPlayers = 1;
+
 /// The controller of player p (1..4): a GUID, or "" for automatic (p = 1) / nobody.
 std::string PlayerPad(int p) {
     std::string v = g_app.game.Get("port." + std::to_string(p));
@@ -2645,7 +2648,7 @@ void ControllersPage() {
     };
     auto players_of = [&](const Pads::Info& p) {
         std::string out;
-        for (int n = 1; n <= 4; ++n)
+        for (int n = 1; n <= kPlayers; ++n)
             if (PlayerPad(n) == p.guid) out += (out.empty() ? "" : " ") + std::string(T("J", "P")) + std::to_string(n);
         return out;
     };
@@ -2728,8 +2731,9 @@ void ControllersPage() {
         }
     }
 
-    Section(T("Jugadores", "Players"));
-    for (int n = 1; n <= 4; ++n) {
+    // Deadpool is single-player: only player 1 (bbport.ini port.1) is offered.
+    Section(T("Jugador", "Player"));
+    for (int n = 1; n <= kPlayers; ++n) {
         ImGui::PushID(n);
         const std::string current = PlayerPad(n);
         std::string preview = n == 1 ? T("Automático: el último mando que uses", "Automatic: the last controller used")
@@ -2766,11 +2770,6 @@ void ControllersPage() {
         if (n == 1)
             HelpMarker(T("El jugador 1 también usa el teclado. En automático juega el mando que toques: coge cualquiera y pulsa un botón.",
                          "Player 1 also uses the keyboard. On automatic, the controller you touch plays: pick any and press a button."));
-        if (n == 2)
-            HelpMarker(T("Jugadores 2 a 4: pantalla dividida. Entran al juego mientras su mando está conectado. También se cambia "
-                         "dentro del juego (Insert › Controllers).",
-                         "Players 2 to 4: split screen. They join the game while their controller is connected. Also set in "
-                         "the game (Insert › Controllers)."));
         ImGui::PopID();
     }
 

@@ -861,7 +861,8 @@ void Menu() {
     // SacredFire: controller ports for split screen. Each port takes one connected gamepad; the
     // runtime logs the matching user in and reads that pad for it. Port 1 is the player.
     if (ImGui::BeginTabItem(BbSettings::MenuText("Controllers", "Контроллеры"))) {
-    MenuSection(BbSettings::MenuText("Controllers (split screen)", "Контроллеры (разделённый экран)"));
+    // deadpool-port: single-player; only port 1 (the player's controller) is offered.
+    MenuSection(BbSettings::MenuText("Controller", "Контроллер"));
     {
         int count = 0;
         SDL_JoystickID* ids = SDL_GetGamepads(&count);
@@ -874,7 +875,8 @@ void Menu() {
         }
         SDL_free(ids);
         bool changed = false;
-        for (int p = 0; p < BbSettings::ControllerPorts; ++p) {
+        constexpr int menu_ports = 1;
+        for (int p = 0; p < menu_ports && p < BbSettings::ControllerPorts; ++p) {
             std::string current;
             {
                 std::lock_guard lk{BbSettings::PortsMutex()};
@@ -885,7 +887,7 @@ void Menu() {
                 if (guid == current) label = text;
             }
             char title[32];
-            std::snprintf(title, sizeof title, "%s %d", BbSettings::MenuText("Port", "Порт"), p + 1);
+            std::snprintf(title, sizeof title, "%s", BbSettings::MenuText("Player 1", "Игрок 1"));
             if (ImGui::BeginCombo(title, label.c_str())) {
                 if (ImGui::Selectable(p == 0 ? BbSettings::MenuText("(first / last used)", "(первый / последний использованный)") : BbSettings::MenuText("(none)", "(нет)"), current.empty())) {
                     std::lock_guard lk{BbSettings::PortsMutex()};
@@ -905,8 +907,6 @@ void Menu() {
         if (changed) {
             BbSettings::Save();
         }
-        ImGui::TextDisabled("%s", BbSettings::MenuText("Ports 2-4 log in as Player 2-4 while their gamepad is connected",
-                                                 "Порты 2-4 входят как Player 2-4, пока подключён их геймпад"));
     }
 
     // SacredFire: the Steam Deck sometimes shows a controller connected after launch only to a
