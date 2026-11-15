@@ -1322,6 +1322,10 @@ const ImVec4 kYellow{1.0f, 0.78f, 0.30f, 1.0f};
 const ImVec4 kGrey{0.58f, 0.61f, 0.70f, 1.0f};
 const ImVec4 kText{0.92f, 0.93f, 0.96f, 1.0f};
 const ImVec4 kAccent{1.0f, 0.54f, 0.12f, 1.0f};        // #FF8A1F
+// Deadpool red: the Play button and the tabs.
+const ImVec4 kRedButton{0.84f, 0.15f, 0.18f, 1.0f};        // #D7262E
+const ImVec4 kRedButtonHover{0.91f, 0.26f, 0.29f, 1.0f};   // #E8434A
+const ImVec4 kRedButtonActive{0.69f, 0.12f, 0.15f, 1.0f};  // #B01E25
 const ImVec4 kAccentHover{1.0f, 0.63f, 0.26f, 1.0f};
 const ImVec4 kAccentActive{0.91f, 0.45f, 0.06f, 1.0f};
 const ImVec4 kBlue{0.30f, 0.64f, 1.0f, 1.0f};
@@ -1465,13 +1469,15 @@ void ApplyTheme(float scale) {
     c[ImGuiCol_SeparatorHovered] = kAccentHover;
     c[ImGuiCol_SeparatorActive] = kAccent;
     c[ImGuiCol_ResizeGrip] = ImVec4(0, 0, 0, 0);
-    c[ImGuiCol_Tab] = kPanel;
-    c[ImGuiCol_TabHovered] = kFrameHover;
-    c[ImGuiCol_TabSelected] = kCard;
-    c[ImGuiCol_TabSelectedOverline] = kAccent;
-    c[ImGuiCol_TabDimmed] = kPanel;
-    c[ImGuiCol_TabDimmedSelected] = kCard;
-    c[ImGuiCol_TabDimmedSelectedOverline] = kAccent;
+    // Tabs in the Play button's Deadpool red (white labels: the tab lambda in Frame); the open one
+    // darker, with a white top line.
+    c[ImGuiCol_Tab] = kRedButton;
+    c[ImGuiCol_TabHovered] = kRedButtonHover;
+    c[ImGuiCol_TabSelected] = kRedButtonActive;
+    c[ImGuiCol_TabSelectedOverline] = ImVec4(1, 1, 1, 1);
+    c[ImGuiCol_TabDimmed] = kRedButton;
+    c[ImGuiCol_TabDimmedSelected] = kRedButtonActive;
+    c[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(1, 1, 1, 1);
     c[ImGuiCol_PlotHistogram] = kAccent;
     c[ImGuiCol_PlotHistogramHovered] = kAccentHover;
     c[ImGuiCol_TableHeaderBg] = kFrame;
@@ -1645,9 +1651,9 @@ void PlayTab() {
     } else {
         ImGui::BeginDisabled(!ready || busy || !a.python);
         // Deadpool red, white label.
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.84f, 0.15f, 0.18f, 1.0f));         // #D7262E
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.91f, 0.26f, 0.29f, 1.0f));  // #E8434A
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.69f, 0.12f, 0.15f, 1.0f));   // #B01E25
+        ImGui::PushStyleColor(ImGuiCol_Button, kRedButton);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, kRedButtonHover);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, kRedButtonActive);
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
         if (ImGui::Button((std::string(ICON_PLAY "  ") + T("JUGAR", "PLAY")).c_str(), ImVec2(-FLT_MIN, play_height)))
             StartGame();
@@ -3771,7 +3777,10 @@ void Frame() {
         auto tab = [go](const char* icon, const char* label, const char* id) {
             const std::string text = std::string(icon) + "  " + label + "###" + id;
             const bool select = go && std::strcmp(go, id) == 0;
-            return ImGui::BeginTabItem(text.c_str(), nullptr, select ? ImGuiTabItemFlags_SetSelected : 0);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));  // white on the red tabs
+            const bool open = ImGui::BeginTabItem(text.c_str(), nullptr, select ? ImGuiTabItemFlags_SetSelected : 0);
+            ImGui::PopStyleColor();
+            return open;
         };
         if (tab(ICON_PLAY, T("Jugar", "Play"), "play")) {
             ImGui::BeginChild("play");
