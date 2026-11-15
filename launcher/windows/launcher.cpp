@@ -1364,6 +1364,8 @@ const ImVec4 kBorder{0.173f, 0.192f, 0.259f, 1.0f};
 #define ICON_DISPLAY "\xEE\x9F\xB4"   // E7F4
 #define ICON_DOWNLOAD "\xEE\xA2\x96"  // E896
 #define ICON_STAR "\xEE\x9C\xB4"      // E734
+#define ICON_CHEVRON_DOWN "\xEE\x9C\x8D"   // E70D
+#define ICON_CHEVRON_RIGHT "\xEE\x9D\xAC"  // E76C
 
 ImFont* g_font_heading = nullptr;  // Segoe UI Semibold (section titles)
 ImFont* g_font_title = nullptr;    // Bahnschrift (the header, the Play button)
@@ -1716,14 +1718,19 @@ void PlayTab() {
     if (!status.empty()) ImGui::TextColored(kGrey, "%s", status.c_str());
 
     ImGui::Spacing();
-    // The log's bar in solid Deadpool red, white label.
-    ImGui::PushStyleColor(ImGuiCol_Header, kRedButton);
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, kRedButtonHover);
-    ImGui::PushStyleColor(ImGuiCol_HeaderActive, kRedButtonActive);
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
-    const bool log_open =
-        ImGui::CollapsingHeader(T("Registro", "Log"), a.game_running || a.show_exit ? ImGuiTreeNodeFlags_DefaultOpen : 0);
-    ImGui::PopStyleColor(4);
+    // The log's bar: a red button as wide as the Play button (a CollapsingHeader reaches past
+    // the content's edges), white chevron and label.
+    static int log_state = -1;  // -1: follow the game (open while it runs or after it ended)
+    const bool log_open = log_state < 0 ? (a.game_running || a.show_exit) : log_state == 1;
+    {
+        const std::string label =
+            std::string(log_open ? ICON_CHEVRON_DOWN : ICON_CHEVRON_RIGHT) + "  " + T("Registro", "Log");
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+        ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
+        if (ImGui::Button(label.c_str(), ImVec2(-FLT_MIN, 0))) log_state = log_open ? 0 : 1;
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+    }
     if (log_open) {
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kCardBlack);
         ImGui::PushStyleColor(ImGuiCol_Border, kRedButton);
