@@ -1393,9 +1393,11 @@ std::string EditionLabel();
 void Section(const char* label) {
     ImGui::Spacing();
     if (g_font_heading) ImGui::PushFont(g_font_heading, 0.0f);
-    ImGui::PushStyleColor(ImGuiCol_Text, kAccent);
+    // White heading on a Deadpool-red line.
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+    ImGui::PushStyleColor(ImGuiCol_Separator, kRedButton);
     ImGui::SeparatorText(label);
-    ImGui::PopStyleColor();
+    ImGui::PopStyleColor(2);
     if (g_font_heading) ImGui::PopFont();
 }
 
@@ -1680,7 +1682,15 @@ void PlayTab() {
     if (!status.empty()) ImGui::TextColored(kGrey, "%s", status.c_str());
 
     ImGui::Spacing();
-    if (ImGui::CollapsingHeader(T("Registro", "Log"), a.game_running || a.show_exit ? ImGuiTreeNodeFlags_DefaultOpen : 0)) {
+    // The log's bar in solid Deadpool red, white label.
+    ImGui::PushStyleColor(ImGuiCol_Header, kRedButton);
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, kRedButtonHover);
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, kRedButtonActive);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+    const bool log_open =
+        ImGui::CollapsingHeader(T("Registro", "Log"), a.game_running || a.show_exit ? ImGuiTreeNodeFlags_DefaultOpen : 0);
+    ImGui::PopStyleColor(4);
+    if (log_open) {
         ImGui::PushStyleColor(ImGuiCol_ChildBg, kPanel);
         ImGui::BeginChild("log", ImVec2(0, std::max(ImGui::GetContentRegionAvail().y, ImGui::GetFontSize() * 12.0f)),
                           ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
