@@ -3733,17 +3733,22 @@ void Sidebar(const NavTab* tabs, size_t count, float width) {
     dl->AddText(title_font, title_size, ImVec2(x, at.y + 2.0f * s), IM_COL32(0xFF, 0xFF, 0xFF, 0xFF), "Deadpool PS4 Port");
     std::string version = a.version;
     if (const auto dash = version.find("-windows"); dash != std::string::npos) version.erase(dash);
-    const std::string subtitle =
-        std::string(T("Port nativo", "Native Windows port")) + (version.empty() ? "" : " · " + version);
-    dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.78f, ImVec2(x, at.y + 4.0f * s + title_size),
-                Col(kGrey), subtitle.c_str());
-    ImGui::Dummy(ImVec2(0, logo + 14.0f * s));
+    // "Native Windows port", then the version on its own line (it does not fit beside it).
+    const float small = ImGui::GetFontSize() * 0.78f;
+    const float sub_y = at.y + 4.0f * s + title_size;
+    dl->AddText(ImGui::GetFont(), small, ImVec2(x, sub_y), Col(kGrey), T("Port nativo para Windows", "Native Windows port"));
+    if (!version.empty())
+        dl->AddText(ImGui::GetFont(), small, ImVec2(x, sub_y + small * 1.25f), Col(kGrey), version.c_str());
+    const float block = std::max(logo, sub_y + small * (version.empty() ? 1.25f : 2.5f) - at.y);
+    ImGui::Dummy(ImVec2(0, block + 14.0f * s));
     at = ImGui::GetCursorScreenPos();
     dl->AddRectFilled(at, ImVec2(right - 14.0f * s, at.y + 2.0f * s), Col(kRedButton), 1.0f * s);
     ImGui::Dummy(ImVec2(0, 16.0f * s));
 
-    // The tabs: the open one red, rounded on the left and running to the column's edge.
-    const float row = 44.0f * s;
+    // The tabs: the open one red, rounded on the left and running to the column's edge. Close
+    // together: 4 px between rows instead of the theme's item spacing.
+    const float row = 40.0f * s;
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 4.0f * s));
     for (size_t i = 0; i < count; ++i) {
         const NavTab& t = tabs[i];
         const bool on = g_tab == t.id;
@@ -3765,8 +3770,8 @@ void Sidebar(const NavTab* tabs, size_t count, float width) {
         dl->AddText(label_font, ImGui::GetFontSize(), ImVec2(at.x + 16.0f * s + ImGui::GetFontSize() * 1.9f, at.y + (row - line) * 0.5f),
                     white, t.label);
         ImGui::PopID();
-        ImGui::Dummy(ImVec2(0, 2.0f * s));
     }
+    ImGui::PopStyleVar();
 
     // The game's state at the bottom.
     const auto pills = StatusPills();
