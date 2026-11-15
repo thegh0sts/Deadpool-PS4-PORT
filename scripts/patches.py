@@ -9,7 +9,7 @@ the write goes, from the signature's start). The write goes to Address when the 
 there; otherwise to the one place in the executable where it matches. No match, or more than one:
 the patch is skipped whole, with a log line.
 
-Patch files: patches/*.xml in the checkout (none yet for Deadpool) and any folder named with
+Patch files: patches/*.xml in the checkout (Deadpool.xml: the frame rate unlock) and any folder named with
 --patches-dir. A patch is applied when the in-game menu or the launcher turned its bbport.ini key
 on (GAME_PATCH_KEYS), when patches.json lists it under "enabled", or when its file marks it
 isEnabled and patches.json does not disable it.
@@ -118,13 +118,14 @@ def external_patches(directory, app_version=APP_VERSION, title_id=TITLE_ID):
     return found
 
 
-def external_selection(found, config, ini=None):
+def external_selection(found, config, ini=None, extra=()):
     """Selected patches: patches.json {"enabled": [...], "disabled": [...]} overrides each file's
     isEnabled; bbport.ini patch_* keys (GAME_PATCH_KEYS, the in-game menu) add to it."""
     settings={}
     if config and Path(config).is_file():
         settings=json.loads(Path(config).read_text())
     enabled,disabled=set(settings.get('enabled',[])),set(settings.get('disabled',[]))
+    for key in extra: enabled.add(key); disabled.discard(key)
     for key,patch in GAME_PATCH_KEYS.items():
         if (ini or {}).get(key)=='1': enabled.add(patch); disabled.discard(patch)
     return [(key,path,meta) for key,path,meta in found
@@ -174,13 +175,15 @@ def main():
     p.add_argument('--title-id',default=TITLE_ID,help='the game (patch files naming other ids are skipped)')
     p.add_argument('--out',type=Path,default=root/'out')
     p.add_argument('--settings',type=Path,default=root/'bbport.ini')
+    p.add_argument('--enable',action='append',default=[],metavar='KEY',
+                   help='also apply this patch ("<file>/<patch name>"; run.py: BB_FPS=uncap)')
     p.add_argument('--external-only',action='store_true',help='accepted for older callers (the only mode)')
     a=p.parse_args()
     elf=(a.out/'eboot.elf').read_bytes()
     segments=eboot_segments(elf)
     found=external_patches(a.patches_dir,a.app_version,a.title_id)
     settings=read_settings(a.settings)
-    writes=compile_external(external_selection(found,a.patches_config,settings),segments,elf)
+    writes=compile_external(external_selection(found,a.patches_config,settings,a.enable),segments,elf)
     write_blob(a.out,writes)
     print(f'Patches: {len(writes)} writes from {len(found)} available patches')
 

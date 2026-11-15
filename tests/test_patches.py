@@ -112,9 +112,17 @@ class SignatureTests(unittest.TestCase):
 
 
 class GamePatchTests(unittest.TestCase):
-    def test_no_bundled_patches_yet(self):
+    def test_bundled_patches(self):
+        # Only the frame rate unlock, off unless asked for (run.py --enable with BB_FPS=uncap).
         self.assertEqual(GAME_PATCH_KEYS, {})
-        self.assertEqual(external_patches(ROOT / 'patches'), [])
+        found = external_patches(ROOT / 'patches')
+        self.assertEqual([key for key, _, _ in found], ['Deadpool.xml/Unlock frame rate'])
+        self.assertEqual(external_selection(found, None), [])
+        selected = external_selection(found, None, extra=['Deadpool.xml/Unlock frame rate'])
+        self.assertEqual([key for key, _, _ in selected], ['Deadpool.xml/Unlock frame rate'])
+        line = next(selected[0][2].iter('Line'))
+        self.assertEqual(int(line.get('Address'), 0) - EBOOT_BASE, 0x78848e)
+        self.assertEqual(encode(line), bytes.fromhex('e9f500000090'))
 
     def test_ini_keys_select_patches(self):
         with tempfile.TemporaryDirectory() as tmp:
