@@ -152,3 +152,10 @@ at image+0x758bb0 (10 readers; one compares the width with 1280). `BB_SCREEN_SIZ
 (run.py -> scripts/patches.py `--builtin screen_size=WxH`) patches those two constants; untested.
 Still to do: whether render targets, display buffers and the port's presenter follow; Hor+ field
 of view; HUD/Scaleform centred at 16:9; Bink videos pillarboxed; 21:9 output sizes in the launcher.
+
+## Keyboard and mouse (parked)
+
+The launcher's Keyboard page was removed and keyboard/mouse bindings are on hold until the user
+has the official PC controls of Deadpool to copy. The runtime still has its default keys
+(src/runtime_pad.c bind_defaults, bbport.ini key.* lines); the launcher's KeyboardTab() is kept,
+unused, for when the page comes back with Deadpool's actions.
