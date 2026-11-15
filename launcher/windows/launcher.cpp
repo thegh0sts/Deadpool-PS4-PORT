@@ -1319,7 +1319,7 @@ void WritePatchConfig(const std::vector<std::string>& enabled, const std::vector
 // Bahnschrift for titles and Segoe Fluent Icons / MDL2 Assets merged in for the icons below.
 const ImVec4 kGreen{0.42f, 0.86f, 0.52f, 1.0f};
 const ImVec4 kRed{1.0f, 0.42f, 0.40f, 1.0f};
-const ImVec4 kYellow{1.0f, 0.78f, 0.30f, 1.0f};
+const ImVec4 kYellow{1.0f, 1.0f, 1.0f, 1.0f};  // notices and "in progress" text: white (was amber)
 const ImVec4 kGrey{0.58f, 0.61f, 0.70f, 1.0f};
 const ImVec4 kText{0.92f, 0.93f, 0.96f, 1.0f};
 // The accent (slider grabs, highlights, the controller view): Deadpool red, was orange.
@@ -1516,9 +1516,10 @@ void ApplyTheme(float scale) {
     c[ImGuiCol_Button] = kRedButton;
     c[ImGuiCol_ButtonHovered] = kRedButtonHover;
     c[ImGuiCol_ButtonActive] = kRedButtonActive;
-    c[ImGuiCol_Header] = ImVec4(1.0f, 0.54f, 0.12f, 0.20f);
-    c[ImGuiCol_HeaderHovered] = ImVec4(1.0f, 0.54f, 0.12f, 0.30f);
-    c[ImGuiCol_HeaderActive] = ImVec4(1.0f, 0.54f, 0.12f, 0.42f);
+    // Highlighted rows (lists, dropdown items): red tints (were orange).
+    c[ImGuiCol_Header] = ImVec4(0.84f, 0.15f, 0.18f, 0.30f);
+    c[ImGuiCol_HeaderHovered] = ImVec4(0.84f, 0.15f, 0.18f, 0.45f);
+    c[ImGuiCol_HeaderActive] = ImVec4(0.84f, 0.15f, 0.18f, 0.60f);
     c[ImGuiCol_Separator] = kBorder;
     c[ImGuiCol_SeparatorHovered] = kAccentHover;
     c[ImGuiCol_SeparatorActive] = kAccent;
@@ -1540,7 +1541,7 @@ void ApplyTheme(float scale) {
     c[ImGuiCol_TableRowBg] = ImVec4(0, 0, 0, 0);
     c[ImGuiCol_TableRowBgAlt] = ImVec4(1, 1, 1, 0.025f);
     c[ImGuiCol_TextLink] = kBlue;
-    c[ImGuiCol_TextSelectedBg] = ImVec4(1.0f, 0.54f, 0.12f, 0.35f);
+    c[ImGuiCol_TextSelectedBg] = ImVec4(0.84f, 0.15f, 0.18f, 0.45f);
     c[ImGuiCol_NavCursor] = kAccent;
     c[ImGuiCol_ModalWindowDimBg] = ImVec4(0, 0, 0, 0.55f);
 }
