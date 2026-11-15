@@ -43,6 +43,36 @@
 
 namespace Vulkan {
 
+namespace {
+// deadpool-port: frame capture of geometry. A buffer a draw reads: where, how big, a hash of its
+// contents (to compare frames) and, read as floats, the largest finite magnitude and the count of
+// NaN/Inf values (exploded or garbage vertex and bone data). At most 1 MiB is read.
+void NoteBufferStats(const char* kind, u32 slot, VAddr address, u64 size, u32 stride) {
+    if (!address || !size) {
+        return;
+    }
+    const u64 bytes = std::min<u64>(size, 1ull << 20);
+    const auto* f = reinterpret_cast<const float*>(address);
+    float max_abs = 0.0f;
+    u64 non_finite = 0;
+    for (u64 i = 0; i < bytes / 4; ++i) {
+        const float v = f[i];
+        if (!std::isfinite(v)) {
+            ++non_finite;
+        } else if (std::fabs(v) > max_abs) {
+            max_abs = std::fabs(v);
+        }
+    }
+    char note[192];
+    std::snprintf(note, sizeof(note),
+                  "\n    %s %u at %#llx size %llu stride %u hash %016llx max %.3g nonfinite %llu",
+                  kind, slot, (unsigned long long)address, (unsigned long long)size, stride,
+                  (unsigned long long)XXH3_64bits(reinterpret_cast<const void*>(address), bytes),
+                  double(max_abs), (unsigned long long)non_finite);
+    FrameCapture::Note(note);
+}
+} // namespace
+
 static Shader::PushData MakeUserData(const AmdGpu::Regs& regs) {
     // TODO(roamic): Add support for multiple viewports and geometry shaders when ViewportIndex
     // is encountered and implemented in the recompiler.
@@ -1708,6 +1738,13 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     if (FrameCapture::Active()) {
         const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
         FrameCapture::Draw(vs_info.pgm_hash, ps ? ps->pgm_hash : 0, num_indices, num_instances);
+        {
+            char note[128];
+            std::snprintf(note, sizeof(note), "\n  draw vs %08x ps %08x idx %u inst %u (buffers above)",
+                          u32(vs_info.pgm_hash), u32(ps ? ps->pgm_hash : 0), num_indices,
+                          num_instances);
+            FrameCapture::Note(note);
+        }
         if (const auto& bc = regs.blend_control[0]; bc.enable && regs.color_buffers[0]) {
             char note[128];
             std::snprintf(note, sizeof(note), "\n  blend ps %08x idx %u: src %u dst %u func %u z %u%u",
@@ -2429,6 +2466,18 @@ void Rasterizer::ResolveVertexBuffers(const GraphicsPipeline* pipeline,
                                 : XXH3_64bits(guest_buffers.data(),
                                               guest_buffers.size() * sizeof(AmdGpu::Buffer));
     }
+    // deadpool-port: every draw's vertex streams.
+    if (FrameCapture::Active()) {
+        u32 slot = 0;
+        for (const auto& vb : guest_buffers) {
+            if (vb.base_address && memory->IsValidGpuMapping(vb.base_address, 0)) {
+                NoteBufferStats("vb", slot,
+                                vb.base_address, memory->ClampRangeSize(vb.base_address, vb.GetSize()),
+                                u32(vb.GetStride()));
+            }
+            ++slot;
+        }
+    }
     // Object motion research: vertex streams of G-buffer draws.
     if (FrameCapture::Active() && gbuffer_draw) {
         for (const auto& vb : guest_buffers) {
@@ -2864,6 +2913,13 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
                               (unsigned long long)vsharp.base_address, u32(vsharp.GetSize()),
                               u32(vsharp.GetStride()), f[0], f[1], f[2], f[3]);
                 FrameCapture::Note(note);
+            }
+            if (FrameCapture::Active() && stage.sw_stage == Shader::SwStage::Vertex &&
+                vsharp.base_address != 0 && vsharp.GetSize() != 0 &&
+                memory->IsValidGpuMapping(vsharp.base_address, 0)) {
+                NoteBufferStats("vs buf", binding.buffer, vsharp.base_address,
+                                memory->ClampRangeSize(vsharp.base_address, vsharp.GetSize()),
+                                u32(vsharp.GetStride()));
             }
             if (FrameCapture::Active() && vsharp.base_address != 0 && vsharp.GetSize() != 0 &&
                 memory->IsValidGpuMapping(vsharp.base_address, 0)) {
