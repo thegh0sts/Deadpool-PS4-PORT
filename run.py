@@ -272,6 +272,8 @@ def main():
                        '--app-version', app_version, '--title-id', title_id, '--out', out,
                        '--settings', config,
                        *(['--builtin', 'unlock_fps'] if fps == 'uncap' else []),
+                       # BB_FPS=60: illusion's patch (the game's own flip rate at 60).
+                       *(['--builtin', 'flip_rate_60'] if fps == '60' else []),
                        # BB_SCREEN_SIZE=2560x1080: the game's own screen size (ultrawide work).
                        *(['--builtin', 'screen_size=' + env['BB_SCREEN_SIZE']] if env.get('BB_SCREEN_SIZE') else []))
             if fps == 'uncap':

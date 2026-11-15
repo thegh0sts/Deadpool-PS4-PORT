@@ -36,6 +36,13 @@ BUILTIN_PATCHES={
     # also ignores the game's flip rate.
     'unlock_fps': [(0x00b8848e, bytes.fromhex('e9f500000090'),
                     'ff 90 a8 02 00 00 c5 f0 57 c9 c5 f8 2e c1 0f 86 f4 00 00 00', 14)],
+    # illusion's "60 FPS Unlock" for Deadpool 01.00 (illusion0001/PS4-PS5-Game-Patch,
+    # Deadpool-Orbis.xml): the game asks sceVideoOutSetFlipRate(handle, 1), a flip every 2nd
+    # vblank; this makes it 0. The engine then paces itself at 60 consistently (its menus too),
+    # unlike unlock_fps, which skips the engine's wait and leaves the menus' animations broken.
+    # "mov $0x1,%esi" before the call: its immediate's first byte.
+    'flip_rate_60': [(0x00b41aa1, bytes([0]),
+                      '83 39 00 74 0c be 01 00 00 00 89 c7 e8', 6)],
 }
 
 

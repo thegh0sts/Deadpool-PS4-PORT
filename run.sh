@@ -81,7 +81,7 @@ fi
 # in-game menu (bbport.ini patch_* keys) or patches.json; BB_PATCHES_DIR adds another folder.
 fps=${BB_FPS:-uncap}  # unlocked by default; BB_FPS=30 for the stock pacing
 # BB_FPS=uncap: the engine's own 30 FPS limiter is patched out too (scripts/patches.py unlock_fps).
-fps_patch=; [[ $fps == uncap ]] && fps_patch=unlock_fps
+fps_patch=; [[ $fps == uncap ]] && fps_patch=unlock_fps; [[ $fps == 60 ]] && fps_patch=flip_rate_60
 "$PYTHON" scripts/patches.py --patches-dir "${BB_PATCHES_DIR:-patches}" --patches-config "${BB_PATCHES_CONFIG:-$data/patches.json}" \
     --app-version "$app_version" --title-id "$title_id" --out "$out" --settings "$BB_CONFIG" \
     ${fps_patch:+--builtin "$fps_patch"}
