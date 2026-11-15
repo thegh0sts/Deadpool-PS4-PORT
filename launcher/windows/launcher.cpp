@@ -10,6 +10,7 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#include <cstdarg>
 #include <windows.h>
 #include <d3d11.h>
 #include <dwmapi.h>
@@ -1401,6 +1402,36 @@ void Section(const char* label) {
     if (g_font_heading) ImGui::PopFont();
 }
 
+/// An icon in white, then text in `color` on the same line (icons are white everywhere).
+void IconText(const ImVec4& color, const char* icon, const char* fmt, ...) {
+    ImGui::TextColored(ImVec4(1, 1, 1, 1), "%s", icon);
+    ImGui::SameLine(0.0f, ImGui::CalcTextSize("  ").x);
+    ImGui::PushStyleColor(ImGuiCol_Text, color);
+    va_list args;
+    va_start(args, fmt);
+    ImGui::TextV(fmt, args);
+    va_end(args);
+    ImGui::PopStyleColor();
+}
+
+/// A checkbox in Deadpool red: a red box with a white tick when on, a red outline when off.
+bool RedCheckbox(const char* label, bool* v) {
+    ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(1, 1, 1, 1));
+    ImGui::PushStyleColor(ImGuiCol_Border, kRedButton);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f * g_ui_scale);
+    const bool on = *v;
+    if (on) {
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, kRedButton);
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, kRedButtonHover);
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, kRedButtonActive);
+    }
+    const bool changed = ImGui::Checkbox(label, v);
+    if (on) ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(2);
+    return changed;
+}
+
 /// A rounded panel that grows with its content.
 void BeginCard(const char* id) {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, kCard);
@@ -1521,7 +1552,7 @@ void HelpMarker(const char* text) {
 
 void GameFlag(const char* key, const char* label, bool fallback, const char* help = nullptr) {
     bool v = g_app.game.Flag(key, fallback);
-    if (ImGui::Checkbox(label, &v)) {
+    if (RedCheckbox(label, &v)) {
         g_app.game.Set(key, v ? "1" : "0");
         SaveGameIni();
     }
@@ -1530,7 +1561,7 @@ void GameFlag(const char* key, const char* label, bool fallback, const char* hel
 
 void LauncherFlag(const char* key, const char* label, bool fallback, const char* help = nullptr) {
     bool v = g_app.launcher.Flag(key, fallback);
-    if (ImGui::Checkbox(label, &v)) {
+    if (RedCheckbox(label, &v)) {
         g_app.launcher.Set(key, v ? "1" : "0");
         SaveLauncher();
     }
@@ -1590,7 +1621,7 @@ void PlayTab() {
         } else if (!a.game_checked) {
             ImGui::TextColored(kYellow, "%s", T("Comprobando el juego...", "Checking the game..."));
         } else if (a.game_ok) {
-            ImGui::TextColored(kGreen, "%s  %s %s", ICON_CHECK, T("Listo:", "Ready:"), Describe(a.game_info).c_str());
+            IconText(kGreen, ICON_CHECK, "%s %s", T("Listo:", "Ready:"), Describe(a.game_info).c_str());
             const std::string edition = EditionLabel();
             if (!edition.empty()) {
                 ImGui::SameLine();
@@ -1832,7 +1863,7 @@ void SettingsTab() {
     ChoiceCombo(T("Presentación", "Presentation"), "present_mode", kPresentModes, "Mailbox");
 
     Section(T("Mando", "Controller"));
-    ImGui::TextColored(kGrey, "%s  %s", ICON_GAMEPAD,
+    IconText(kGrey, ICON_GAMEPAD, "%s",
                        T("El mando y los botones están en la pestaña Controles.",
                          "The controller and buttons are in the Controls tab."));
     ImGui::SameLine();
@@ -1867,7 +1898,7 @@ void PatchesTab() {
             const bool listed_off = std::find(a.patch_disabled.begin(), a.patch_disabled.end(), p.key) != a.patch_disabled.end();
             on = listed_on || (p.default_on && !listed_off);
         }
-        if (ImGui::Checkbox(p.name.c_str(), &on)) {
+        if (RedCheckbox(p.name.c_str(), &on)) {
             if (p.ini_key) {
                 a.game.Set(p.ini_key, on ? "1" : "0");
                 SaveGameIni();
@@ -2194,7 +2225,7 @@ void DlcTab() {
         ImGui::PushID(d.file.c_str());
         if (d.ok) {
             bool on = std::find(disabled.begin(), disabled.end(), d.label) == disabled.end();
-            if (ImGui::Checkbox(d.title.c_str(), &on)) {
+            if (RedCheckbox(d.title.c_str(), &on)) {
                 disabled.erase(std::remove(disabled.begin(), disabled.end(), d.label), disabled.end());
                 if (!on) disabled.push_back(d.label);
                 a.launcher.Set("dlc_disabled", JoinList(disabled));
@@ -2690,17 +2721,17 @@ void ControllersPage() {
 
     Section(T("Mandos conectados", "Connected controllers"));
     if (a.game_running) {
-        ImGui::TextColored(kYellow, "%s  %s", ICON_INFO,
+        IconText(kYellow, ICON_INFO, "%s",
                            T("El juego está abierto y usa los mandos. Ciérralo para probarlos aquí; dentro del juego, "
                              "Insert › Controllers asigna los puertos.",
                              "The game is running and has the controllers. Close it to test them here; in the game, "
                              "Insert › Controllers assigns the ports."));
     } else if (!sdl) {
-        ImGui::TextColored(kRed, "%s  %s: %s", ICON_WARN, T("No se pueden leer los mandos", "Controllers cannot be read"),
+        IconText(kRed, ICON_WARN, "%s: %s", T("No se pueden leer los mandos", "Controllers cannot be read"),
                            Pads::Error().c_str());
     } else if (pads.empty()) {
         BeginCard("nopads");
-        ImGui::TextColored(kGrey, "%s", ICON_GAMEPAD);
+        ImGui::TextColored(ImVec4(1, 1, 1, 1), "%s", ICON_GAMEPAD);
         ImGui::SameLine();
         ImGui::TextWrapped("%s", T("No hay mandos conectados. Conecta uno por USB o Bluetooth: aparece aquí al momento. "
                                    "El teclado funciona siempre (página Teclado).",
@@ -2724,7 +2755,7 @@ void ControllersPage() {
                 if (ImGui::Selectable("##pad", selected, 0, ImVec2(0, row))) g_pad_selected = p.id;
                 ImDrawList* dl = ImGui::GetWindowDrawList();
                 const float pad_x = 10.0f * g_ui_scale, line = ImGui::GetTextLineHeight();
-                dl->AddText(ImVec2(at.x + pad_x, at.y + row * 0.5f - line * 0.5f), Col(selected ? kAccent : kGrey),
+                dl->AddText(ImVec2(at.x + pad_x, at.y + row * 0.5f - line * 0.5f), IM_COL32(0xFF, 0xFF, 0xFF, selected ? 0xFF : 0xB0),
                             ICON_GAMEPAD);
                 const float tx = at.x + pad_x + ImGui::GetFontSize() * 2.0f;
                 dl->AddText(g_font_heading ? g_font_heading : ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(tx, at.y + row * 0.12f), Col(kText),
@@ -3323,7 +3354,7 @@ void TrophiesTab() {
     }
     if (!t.error.empty()) {
         BeginCard("trophy_error");
-        ImGui::TextColored(kYellow, "%s  %s", ICON_INFO, t.error.c_str());
+        IconText(kYellow, ICON_INFO, "%s", t.error.c_str());
         EndCard();
         return;
     }
@@ -3387,7 +3418,7 @@ void TrophiesTab() {
     if (show_key) {
         ImGui::Spacing();
         BeginCard("trophy_key");
-        ImGui::TextColored(kBlue, "%s", ICON_INFO);
+        ImGui::TextColored(ImVec4(1, 1, 1, 1), "%s", ICON_INFO);
         ImGui::SameLine();
         ImGui::PushTextWrapPos(0.0f);
         if (t.builtin)
@@ -3508,9 +3539,9 @@ void TrophiesTab() {
                 localtime_s(&local, &when);
                 char date[32];
                 std::strftime(date, sizeof date, "%d/%m/%Y %H:%M", &local);
-                ImGui::TextColored(kGreen, "%s %s", ICON_CHECK, date);
+                IconText(kGreen, ICON_CHECK, "%s", date);
             } else if (tr.unlocked) {
-                ImGui::TextColored(kGreen, "%s %s", ICON_CHECK, T("Conseguido", "Unlocked"));
+                IconText(kGreen, ICON_CHECK, "%s", T("Conseguido", "Unlocked"));
             } else {
                 ImGui::TextColored(kGrey, "%s", T("Por conseguir", "Locked"));
             }
@@ -3699,7 +3730,15 @@ void Header() {
         const ImVec2 a1(rx, a0.y + line + pp.y * 2);
         dl->AddRectFilled(a0, a1, Col(color, 0.16f), 99.0f);
         dl->AddRect(a0, a1, Col(color, 0.8f), 99.0f, 0, 1.0f * s);
-        dl->AddText(ImVec2(a0.x + pp.x, a0.y + pp.y), Col(color), text.c_str());
+        // The icon (before the two spaces) in white, the words in the pill's colour.
+        if (const auto split = text.find("  "); split != std::string::npos) {
+            const std::string icon = text.substr(0, split);
+            dl->AddText(ImVec2(a0.x + pp.x, a0.y + pp.y), IM_COL32(0xFF, 0xFF, 0xFF, 0xFF), icon.c_str());
+            dl->AddText(ImVec2(a0.x + pp.x + ImGui::CalcTextSize(icon.c_str()).x, a0.y + pp.y), Col(color),
+                        text.c_str() + split);
+        } else {
+            dl->AddText(ImVec2(a0.x + pp.x, a0.y + pp.y), Col(color), text.c_str());
+        }
         rx = a0.x - 8.0f * s;
     }
     ImGui::SetCursorScreenPos(ImVec2(win.x + ImGui::GetStyle().WindowPadding.x, win.y + height + 10.0f * s));
@@ -3770,7 +3809,7 @@ void Frame() {
 
     if (!a.notice.empty()) {
         BeginCard("notice");
-        ImGui::TextColored(kYellow, ICON_INFO);
+        ImGui::TextColored(ImVec4(1, 1, 1, 1), "%s", ICON_INFO);
         ImGui::SameLine();
         ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x - ImGui::GetFontSize() * 3.0f);
         ImGui::TextUnformatted(a.notice.c_str());
