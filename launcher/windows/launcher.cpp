@@ -793,6 +793,9 @@ void StartGame() {
     }
     SetEnv(L"BB_GAME_DIR", PathText(a.game_dir));
     SetEnv(L"BB_NEO", a.launcher.Flag("neo", false) ? "1" : "0");
+    // Unlocked: the engine's 30 FPS limiter is patched out and the game's flip rate ignored
+    // (run.py, BB_FPS=uncap); the FPS limit below is then the only cap.
+    SetEnv(L"BB_FPS", a.launcher.Flag("unlock_fps", true) ? "uncap" : "30");
     SetEnv(L"BB_LANGUAGE", GameLanguage());
     SetEnv(L"BB_DISPLAY", a.launcher.Get("display"));
     SetEnv(L"BB_PRESENT_MODE", a.launcher.Get("present_mode", "Mailbox"));
@@ -1708,6 +1711,9 @@ void SettingsTab() {
                                       "Applied when you press Play. The in-game menu (Insert or L3+R3) changes the same settings."));
 
     Section(T("Rendimiento", "Performance"));
+    LauncherFlag("unlock_fps", T("Desbloquear la tasa de fotogramas (el juego va a 30)", "Unlock the frame rate (the game runs at 30)"), true,
+                 T("Quita el límite de 30 FPS del juego; el límite de FPS de abajo decide. Desactívalo si algo va demasiado rápido.",
+                   "Removes the game's 30 FPS cap; the FPS limit below decides. Turn it off if something runs too fast."));
     {
         int limit = a.game.Int("fps_limit", 60);
         auto name = [](int v) -> std::string {
@@ -3822,10 +3828,20 @@ void LoadState() {
     a.update_dir = TextPath(a.launcher.Get("update_dir"));
     // First start of a portable package: a merged folder next to the launcher is picked up.
     if (a.game_dir.empty()) {
-        for (const wchar_t* name : {L"CUSA03528", L"CUSA03528-prepared"}) {
+        for (const wchar_t* name : {L"CUSA03528", L"CUSA03528-prepared", L"orig\\CUSA03528"}) {
             if (Analyze(a.root / name).kind == Kind::Complete) {
                 a.game_dir = a.root / name;
                 break;
+            }
+        }
+        // Dumps kept next to the port as Deadpool.PS4-<region> (as run.py looks for them).
+        std::error_code ec;
+        for (const auto& entry : fs::directory_iterator(a.root, ec)) {
+            if (!a.game_dir.empty()) break;
+            const std::wstring name = entry.path().filename().wstring();
+            if (entry.is_directory(ec) && name.rfind(L"Deadpool.PS4-", 0) == 0 &&
+                Analyze(entry.path()).kind == Kind::Complete) {
+                a.game_dir = entry.path();
             }
         }
     }
