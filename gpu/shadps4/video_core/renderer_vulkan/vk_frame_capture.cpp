@@ -19,6 +19,7 @@ struct Target {
     VAddr address{};
     vk::Format format{};
     u32 width{}, height{};
+    u32 guest_size{};
     bool operator==(const Target&) const = default;
 };
 
@@ -57,7 +58,8 @@ std::array<std::atomic<VAddr>, 16> display_list{};
 std::atomic<u32> display_count{0};
 
 Target ToTarget(const VideoCore::ImageInfo& info) {
-    return {info.guest_address, info.pixel_format, info.size.width, info.size.height};
+    return {info.guest_address, info.pixel_format, info.size.width, info.size.height,
+            info.guest_size};
 }
 
 std::string Describe(const Target& t) {
@@ -72,6 +74,30 @@ void AddSampled(Entry& entry) {
         if (entry.sampled.size() < 32 &&
             std::ranges::find(entry.sampled, s) == entry.sampled.end()) {
             entry.sampled.push_back(s);
+            // deadpool-port: what the texture's guest memory holds (UI textures that draw
+            // nothing: never loaded, or loaded where the texture cache did not look).
+            const auto& t = s.first;
+            if (!s.second && t.address && t.guest_size && t.guest_size <= (16u << 20)) {
+                const auto* bytes = reinterpret_cast<const u8*>(t.address);
+                u64 nonzero = 0, blocks = 0, clear_blocks = 0;
+                for (u32 i = 0; i < t.guest_size; ++i) {
+                    nonzero += bytes[i] != 0;
+                }
+                const bool bc3 = t.format == vk::Format::eBc3UnormBlock ||
+                                 t.format == vk::Format::eBc3SrgbBlock;
+                for (u32 i = 0; bc3 && i + 16 <= t.guest_size; i += 16) {
+                    ++blocks;
+                    clear_blocks += bytes[i] == 0 && bytes[i + 1] == 0;
+                }
+                entry.note += std::format(
+                    "\n  texture {:#x}: {} bytes, {} nonzero, first {:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+                    t.address, t.guest_size, nonzero, bytes[0], bytes[1], bytes[2], bytes[3],
+                    bytes[4], bytes[5], bytes[6], bytes[7]);
+                if (bc3) {
+                    entry.note += std::format(" (BC3: {} of {} blocks fully transparent)",
+                                              clear_blocks, blocks);
+                }
+            }
         }
     }
     pending_sampled.clear();
