@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <cstdio>
 #include "common/assert.h"
 #include "common/elf_info.h"
 #include "common/logging/log.h"
@@ -140,6 +141,9 @@ s32 PS4_SYSV_ABI sceVideoOutRegisterBuffers(s32 handle, s32 startIndex, void* co
 
 s32 PS4_SYSV_ABI sceVideoOutSetFlipRate(s32 handle, s32 rate) {
     LOG_TRACE(Lib_VideoOut, "called");
+    // deadpool-port: the game's own frame pacing (0: every vblank, 1: every 2nd, 2: every 3rd).
+    std::printf("VideoOut: the game set flip rate %d (a flip every %d vblank(s))\n", rate,
+                rate + 1);
     driver->GetPort(handle)->flip_rate = rate;
     return ORBIS_OK;
 }
