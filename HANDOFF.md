@@ -159,3 +159,13 @@ The launcher's Keyboard page was removed and keyboard/mouse bindings are on hold
 has the official PC controls of Deadpool to copy. The runtime still has its default keys
 (src/runtime_pad.c bind_defaults, bbport.ini key.* lines); the launcher's KeyboardTab() is kept,
 unused, for when the page comes back with Deadpool's actions.
+
+## Frame rate by level (BB_FPS=auto, default)
+Skipping UE3's FEngineLoop::Tick wait (`unlock_fps`) stretches and skews the main menu's
+animations. `src/runtime_fps.c` switches that wait live instead: the `jbe` after GetMaxTickRate
+(image+0x78848f, located by signature) becomes `jno` (always taken after ucomiss, so no wait) in
+gameplay and goes back to `jbe` in the main menu. The level comes from the map packages the game
+opens (`<name>_m.xxx`): `UI_FrontEnd_m` / `UI_FrontEnd_xtra_m` are the menu, any other map is
+gameplay. The log says `FPS auto: ...` on each switch. Untested: the pause menu and HUD menus
+(no level load there), and the in-game frame pacing of cutscenes. Other modes: `uncap` (always
+unlocked), `60` (illusion's flip-rate patch), `30`.

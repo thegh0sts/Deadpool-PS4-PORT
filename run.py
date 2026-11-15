@@ -246,7 +246,7 @@ def main():
         env.setdefault('BB_COPY_GPU_BUFFERS', '1')
         env.setdefault('BB_GPU_WRITE_TWINS', '1')
         env.setdefault('BB_GPU_WRITE_TWINS_MAX', '65536')
-        fps = env.get('BB_FPS', 'uncap')  # unlocked by default; BB_FPS=30 for the stock pacing
+        fps = env.get('BB_FPS', 'auto')  # auto: 30 in the main menu, unlocked in gameplay; uncap, 60, 30
         user_vblank = env.get('BB_VBLANK_HZ')
 
         version = ''
@@ -276,13 +276,16 @@ def main():
                        *(['--builtin', 'flip_rate_60'] if fps == '60' else []),
                        # BB_SCREEN_SIZE=2560x1080: the game's own screen size (ultrawide work).
                        *(['--builtin', 'screen_size=' + env['BB_SCREEN_SIZE']] if env.get('BB_SCREEN_SIZE') else []))
-            if fps == 'uncap':
+            if fps == 'auto':
+                # src/runtime_fps.c switches the engine's own 30 FPS wait by level (menu on, gameplay off).
+                env['BB_FPS_AUTO'] = '1'
+            if fps in ('uncap', 'auto'):
                 # The game's own pacing (a flip every 2nd vblank) would still cap it.
                 env.setdefault('BB_IGNORE_FLIP_RATE', '1')
             if user_vblank:
                 env['BB_VBLANK_HZ'] = user_vblank
             else:
-                env['BB_VBLANK_HZ'] = {'uncap': '480', '90': '90'}.get(fps, '60')
+                env['BB_VBLANK_HZ'] = {'uncap': '480', 'auto': '480', '90': '90'}.get(fps, '60')
             # No stdin: an inherited pipe (Git Bash, MSYS2) cost the game its console output.
             process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                        stderr=subprocess.STDOUT, creationflags=no_console())

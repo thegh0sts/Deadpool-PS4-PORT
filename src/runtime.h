@@ -31,6 +31,8 @@ void runtime_memory_report(void);
 int runtime_memory_is_mapped(uintptr_t address, uint64_t size);
 /* Prepared-image accessors (probe.c): guest address == host address. */
 uintptr_t runtime_probe_image(uint64_t *size);
+/* BB_FPS=auto (runtime_fps.c): every guest open, to switch the engine's frame limiter by level. */
+void runtime_fps_note_open(const char *guest);
 void runtime_probe_read_image(uintptr_t address, void *data, uint64_t size);
 int runtime_probe_write_image(uintptr_t address, const void *data, uint64_t size);
 void runtime_memory_read_backing(uintptr_t address, void *data, uint64_t size);

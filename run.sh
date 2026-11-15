@@ -79,7 +79,9 @@ fi
 "$PYTHON" scripts/content_profile.py "$game" --out "$out" --sku "${BB_CONTENT_SKU:-full}"
 # Patches: shadPS4-format XML files in patches/ (none bundled for Deadpool), chosen in the
 # in-game menu (bbport.ini patch_* keys) or patches.json; BB_PATCHES_DIR adds another folder.
-fps=${BB_FPS:-uncap}  # unlocked by default; BB_FPS=30 for the stock pacing
+fps=${BB_FPS:-auto}  # auto: 30 in the main menu, unlocked in gameplay; uncap, 60, 30
+# BB_FPS=auto: src/runtime_fps.c switches the engine's own 30 FPS wait by level.
+[[ $fps == auto ]] && export BB_FPS_AUTO=1
 # BB_FPS=uncap: the engine's own 30 FPS limiter is patched out too (scripts/patches.py unlock_fps).
 fps_patch=; [[ $fps == uncap ]] && fps_patch=unlock_fps; [[ $fps == 60 ]] && fps_patch=flip_rate_60
 "$PYTHON" scripts/patches.py --patches-dir "${BB_PATCHES_DIR:-patches}" --patches-config "${BB_PATCHES_CONFIG:-$data/patches.json}" \
@@ -175,7 +177,7 @@ export BB_COPY_GPU_BUFFERS=${BB_COPY_GPU_BUFFERS:-1}
 # up to BB_GPU_WRITE_TWINS_MAX bytes per page) does not wait for the GPU (BufferCache twins).
 export BB_GPU_WRITE_TWINS=${BB_GPU_WRITE_TWINS:-1} BB_GPU_WRITE_TWINS_MAX=${BB_GPU_WRITE_TWINS_MAX:-65536}
 if [[ -z ${BB_VBLANK_HZ:-} ]]; then
-    case $fps in uncap) export BB_VBLANK_HZ=480; export BB_IGNORE_FLIP_RATE=${BB_IGNORE_FLIP_RATE:-1} ;; 90) export BB_VBLANK_HZ=90 ;; *) export BB_VBLANK_HZ=60 ;; esac
+    case $fps in uncap|auto) export BB_VBLANK_HZ=480; export BB_IGNORE_FLIP_RATE=${BB_IGNORE_FLIP_RATE:-1} ;; 90) export BB_VBLANK_HZ=90 ;; *) export BB_VBLANK_HZ=60 ;; esac
 fi
 if [[ -n ${BB_PREBUILT:-} ]]; then
     probe=${BB_PROBE:-bin/sacredfire}

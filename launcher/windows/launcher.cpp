@@ -794,9 +794,10 @@ void StartGame() {
     }
     SetEnv(L"BB_GAME_DIR", PathText(a.game_dir));
     SetEnv(L"BB_NEO", a.launcher.Flag("neo", false) ? "1" : "0");
-    // Unlocked: the engine's 30 FPS limiter is patched out and the game's flip rate ignored
-    // (run.py, BB_FPS=uncap); the FPS limit below is then the only cap.
-    SetEnv(L"BB_FPS", "uncap");  // always unlocked; the FPS limit setting is the cap
+    // Unlocked in gameplay: the engine's 30 FPS limiter is switched off once a level loads and on
+    // again in the main menu, whose animations need it (run.py, BB_FPS=auto, src/runtime_fps.c).
+    // The game's flip rate is ignored; in gameplay the FPS limit below is the only cap.
+    SetEnv(L"BB_FPS", "auto");
     SetEnv(L"BB_LANGUAGE", GameLanguage());
     SetEnv(L"BB_DISPLAY", a.launcher.Get("display"));
     SetEnv(L"BB_PRESENT_MODE", a.launcher.Get("present_mode", "Mailbox"));
