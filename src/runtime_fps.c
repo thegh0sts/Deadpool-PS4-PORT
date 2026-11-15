@@ -27,10 +27,38 @@
 #endif
 
 static const unsigned char signature[]={0xff,0x90,0xa8,0x02,0x00,0x00, 0xc5,0xf0,0x57,0xc9, 0xc5,0xf8,0x2e,0xc1, 0x0f,0x86,0xf4,0x00,0x00,0x00};
-enum { JBE=0x86, JNO=0x81, OPCODE=15 };
+enum { JBE=0x86, JNO=0x81, OPCODE=15, KNOWN=0x788480 };
 static int enabled=-1;            /* BB_FPS_AUTO=1 */
 static unsigned char *site;       /* the jbe's second opcode byte; NULL: not found */
 static volatile int unlocked;     /* the state written last */
+
+/* Bytes readable from p, up to max (0: p is not readable). */
+static uint64_t readable_run(const unsigned char *p, uint64_t max) {
+#ifdef _WIN32
+    MEMORY_BASIC_INFORMATION m;
+    if (!VirtualQuery(p,&m,sizeof(m)) || m.State!=MEM_COMMIT || (m.Protect&(PAGE_GUARD|PAGE_NOACCESS)) ||
+        !(m.Protect&(PAGE_READONLY|PAGE_READWRITE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_WRITECOPY|PAGE_EXECUTE_WRITECOPY)))
+        return 0;
+    uint64_t run=(uint64_t)((const unsigned char *)m.BaseAddress+m.RegionSize-p);
+    return run<max ? run : max;
+#else
+    (void)p; (void)max;
+    return 0;  /* only the known offset is checked */
+#endif
+}
+static int readable(const unsigned char *p, uint64_t n) {
+#ifdef _WIN32
+    while (n) {
+        uint64_t run=readable_run(p,n);
+        if (!run) return 0;
+        p+=run; n-=run;
+    }
+    return 1;
+#else
+    (void)p; (void)n;
+    return 1;
+#endif
+}
 
 static void write_site(unsigned char value) {
 #ifdef _WIN32
@@ -56,8 +84,20 @@ static int init(void) {
     uint64_t size=0;
     unsigned char *image=(unsigned char *)runtime_probe_image(&size), *found=NULL;
     int matches=0;
-    for (uint64_t i=0; image && size>=sizeof(signature) && i<=size-sizeof(signature); ++i)
-        if (image[i]==signature[0] && !memcmp(image+i,signature,sizeof(signature))) { found=image+i; ++matches; }
+    /* CUSA03528 01.00: image+0x788480. The image has unmapped gaps between its segments, so
+     * another build is searched for only in readable memory. */
+    if (image && size>KNOWN+sizeof(signature) && readable(image+KNOWN,sizeof(signature)) &&
+        !memcmp(image+KNOWN,signature,sizeof(signature))) { found=image+KNOWN; matches=1; }
+    for (uint64_t i=0; !found && image && size>=sizeof(signature) && i<=size-sizeof(signature); ) {
+        uint64_t run=readable_run(image+i,size-i);
+        if (!run) { i+=4096-((uintptr_t)(image+i)&4095); continue; }
+        for (uint64_t j=0; j+sizeof(signature)<=run; ++j)
+            if (image[i+j]==signature[0] && !memcmp(image+i+j,signature,sizeof(signature))) {
+                if (!found) found=image+i+j;
+                ++matches;
+            }
+        i+=run;
+    }
     if (matches!=1) {
         printf("FPS auto: the engine's frame limiter was not found (%d matches); the frame rate stays as the game sets it\n",matches);
         enabled=0;
