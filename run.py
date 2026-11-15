@@ -246,7 +246,7 @@ def main():
         env.setdefault('BB_COPY_GPU_BUFFERS', '1')
         env.setdefault('BB_GPU_WRITE_TWINS', '1')
         env.setdefault('BB_GPU_WRITE_TWINS_MAX', '65536')
-        fps = env.get('BB_FPS', '30')
+        fps = env.get('BB_FPS', 'uncap')  # unlocked by default; BB_FPS=30 for the stock pacing
         user_vblank = env.get('BB_VBLANK_HZ')
 
         version = ''

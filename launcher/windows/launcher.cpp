@@ -796,7 +796,7 @@ void StartGame() {
     SetEnv(L"BB_NEO", a.launcher.Flag("neo", false) ? "1" : "0");
     // Unlocked: the engine's 30 FPS limiter is patched out and the game's flip rate ignored
     // (run.py, BB_FPS=uncap); the FPS limit below is then the only cap.
-    SetEnv(L"BB_FPS", a.launcher.Flag("unlock_fps", true) ? "uncap" : "30");
+    SetEnv(L"BB_FPS", "uncap");  // always unlocked; the FPS limit setting is the cap
     SetEnv(L"BB_LANGUAGE", GameLanguage());
     SetEnv(L"BB_DISPLAY", a.launcher.Get("display"));
     SetEnv(L"BB_PRESENT_MODE", a.launcher.Get("present_mode", "Mailbox"));
@@ -1417,6 +1417,21 @@ void IconText(const ImVec4& color, const char* icon, const char* fmt, ...) {
     ImGui::PopStyleColor();
 }
 
+/// A dropdown: 80% black with a red outline, its list black with a red outline too.
+bool RedCombo(const char* label, const char* preview, ImGuiComboFlags flags = 0) {
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, kCardBlack);
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.12f, 0.02f, 0.03f, 0.85f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.20f, 0.03f, 0.05f, 0.90f));
+    ImGui::PushStyleColor(ImGuiCol_Border, kRedButton);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.0f, 0.0f, 0.0f, 0.95f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f * g_ui_scale);
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f * g_ui_scale);
+    const bool open = ImGui::BeginCombo(label, preview, flags);
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(5);
+    return open;
+}
+
 /// A checkbox in Deadpool red: a red box with a white tick when on, a red outline when off.
 bool RedCheckbox(const char* label, bool* v) {
     ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(1, 1, 1, 1));
@@ -1579,7 +1594,7 @@ void ChoiceCombo(const char* label, const char* key, const Choice (&choices)[N],
     const Choice* selected = &choices[0];
     for (const auto& c : choices)
         if (current == c.value) selected = &c;
-    if (ImGui::BeginCombo(label, T(selected->es, selected->en))) {
+    if (RedCombo(label, T(selected->es, selected->en))) {
         for (const auto& c : choices) {
             if (ImGui::Selectable(T(c.es, c.en), &c == selected)) {
                 g_app.launcher.Set(key, c.value);
@@ -1770,7 +1785,7 @@ bool GameChoiceCombo(const char* label, const char* key, const Choice (&choices)
         if (current == c.value) selected = &c;
     bool changed = false;
     ImGui::SetNextItemWidth(ImGui::GetFontSize() * width_em);
-    if (ImGui::BeginCombo(label, T(selected->es, selected->en))) {
+    if (RedCombo(label, T(selected->es, selected->en))) {
         for (const auto& c : choices) {
             if (ImGui::Selectable(T(c.es, c.en), &c == selected) && &c != selected) {
                 a.game.Set(key, c.value);
@@ -1788,9 +1803,6 @@ void SettingsTab() {
                                       "Applied when you press Play. The in-game menu (Insert or L3+R3) changes the same settings."));
 
     Section(T("Rendimiento", "Performance"));
-    LauncherFlag("unlock_fps", T("Desbloquear la tasa de fotogramas (el juego va a 30)", "Unlock the frame rate (the game runs at 30)"), true,
-                 T("Quita el límite de 30 FPS del juego; el límite de FPS de abajo decide. Desactívalo si algo va demasiado rápido.",
-                   "Removes the game's 30 FPS cap; the FPS limit below decides. Turn it off if something runs too fast."));
     {
         int limit = a.game.Int("fps_limit", 60);
         auto name = [](int v) -> std::string {
@@ -1798,7 +1810,7 @@ void SettingsTab() {
             return std::to_string(v) + " FPS";
         };
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 12.0f);
-        if (ImGui::BeginCombo(T("Límite de FPS", "FPS limit"), name(limit).c_str())) {
+        if (RedCombo(T("Límite de FPS", "FPS limit"), name(limit).c_str())) {
             for (int v : kFpsLimits) {
                 if (ImGui::Selectable(name(v).c_str(), v == limit)) {
                     a.game.Set("fps_limit", std::to_string(v));
@@ -1856,7 +1868,7 @@ void SettingsTab() {
         for (const auto& [value, label] : a.displays)
             if (value == current) preview = label;
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 22.0f);
-        if (ImGui::BeginCombo(T("Monitor", "Monitor"), preview.c_str())) {
+        if (RedCombo(T("Monitor", "Monitor"), preview.c_str())) {
             if (ImGui::Selectable(T("Principal", "Primary"), current.empty())) {
                 a.launcher.Set("display", "");
                 SaveLauncher();
@@ -2831,7 +2843,7 @@ void ControllersPage() {
         ImGui::TextUnformatted((std::string(T("Jugador ", "Player ")) + std::to_string(n)).c_str());
         ImGui::SameLine(ImGui::GetFontSize() * 6.0f);
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 22.0f);
-        if (ImGui::BeginCombo("##player", preview.c_str())) {
+        if (RedCombo("##player", preview.c_str())) {
             if (ImGui::Selectable(n == 1 ? T("Automático: el último mando que uses", "Automatic: the last controller used")
                                          : T("Nadie", "Nobody"),
                                   current.empty()))

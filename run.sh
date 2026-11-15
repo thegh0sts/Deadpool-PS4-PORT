@@ -79,7 +79,7 @@ fi
 "$PYTHON" scripts/content_profile.py "$game" --out "$out" --sku "${BB_CONTENT_SKU:-full}"
 # Patches: shadPS4-format XML files in patches/ (none bundled for Deadpool), chosen in the
 # in-game menu (bbport.ini patch_* keys) or patches.json; BB_PATCHES_DIR adds another folder.
-fps=${BB_FPS:-30}
+fps=${BB_FPS:-uncap}  # unlocked by default; BB_FPS=30 for the stock pacing
 # BB_FPS=uncap: the engine's own 30 FPS limiter is patched out too (scripts/patches.py unlock_fps).
 fps_patch=; [[ $fps == uncap ]] && fps_patch=unlock_fps
 "$PYTHON" scripts/patches.py --patches-dir "${BB_PATCHES_DIR:-patches}" --patches-config "${BB_PATCHES_CONFIG:-$data/patches.json}" \
