@@ -3107,6 +3107,17 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
         const auto& image_desc = stage.images[image_index];
         const auto tsharp =
             prepared ? prepared->image_sharps[image_index] : image_desc.GetSharp(stage);
+        // deadpool-port: the raw T# of every texture in the frame capture (format, tiling,
+        // swizzle of UI textures that draw nothing).
+        if (FrameCapture::Active()) {
+            const auto* w = reinterpret_cast<const u32*>(&tsharp);
+            char note[160];
+            std::snprintf(note, sizeof(note),
+                          "\n    T# %#llx: %08x %08x %08x %08x %08x %08x %08x %08x",
+                          (unsigned long long)tsharp.Address(), w[0], w[1], w[2], w[3], w[4], w[5],
+                          w[6], w[7]);
+            FrameCapture::Note(note);
+        }
         // bbport: a hash lookup per texture per draw for a diagnostic only.
         static const bool warn_meta = std::getenv("BB_WARN_META_TEXTURE") != nullptr;
         if (warn_meta && texture_cache.IsMeta(tsharp.Address())) {
