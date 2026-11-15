@@ -172,7 +172,7 @@ export BB_COPY_GPU_BUFFERS=${BB_COPY_GPU_BUFFERS:-1}
 # up to BB_GPU_WRITE_TWINS_MAX bytes per page) does not wait for the GPU (BufferCache twins).
 export BB_GPU_WRITE_TWINS=${BB_GPU_WRITE_TWINS:-1} BB_GPU_WRITE_TWINS_MAX=${BB_GPU_WRITE_TWINS_MAX:-65536}
 if [[ -z ${BB_VBLANK_HZ:-} ]]; then
-    case $fps in uncap) export BB_VBLANK_HZ=480 ;; 90) export BB_VBLANK_HZ=90 ;; *) export BB_VBLANK_HZ=60 ;; esac
+    case $fps in uncap) export BB_VBLANK_HZ=480; export BB_IGNORE_FLIP_RATE=${BB_IGNORE_FLIP_RATE:-1} ;; 90) export BB_VBLANK_HZ=90 ;; *) export BB_VBLANK_HZ=60 ;; esac
 fi
 if [[ -n ${BB_PREBUILT:-} ]]; then
     probe=${BB_PROBE:-bin/sacredfire}

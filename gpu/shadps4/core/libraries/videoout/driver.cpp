@@ -876,7 +876,15 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
         auto& vblank_status = main_port.vblank_status;
         const auto now = std::chrono::steady_clock::now();
         const bool flip_slot = !frame_limit || now >= next_flip;
-        if (flip_slot && vblank_status.count % (main_port.flip_rate + 1) == 0) {
+        // deadpool-port: BB_IGNORE_FLIP_RATE=1 (run.py with BB_FPS=uncap): the game's flip rate
+        // (sceVideoOutSetFlipRate: a flip every 2nd vblank caps it at 30) is not applied; the
+        // port's FPS limit is the only cap.
+        static const bool ignore_flip_rate = [] {
+            const char* env = std::getenv("BB_IGNORE_FLIP_RATE");
+            return env && env[0] == '1';
+        }();
+        const u32 flip_rate = ignore_flip_rate ? 0u : u32(main_port.flip_rate);
+        if (flip_slot && vblank_status.count % (flip_rate + 1) == 0) {
             const auto request = receive_request();
             if (request && frame_limit) {
                 next_flip = std::max(next_flip + frame_period, now - frame_period);
