@@ -71,23 +71,33 @@ Verified here: all Python tests pass; run.sh's Python steps run on the EU dump u
 `patches.bin`; the changed GPU-shim files and the Windows launcher pass a compile (syntax)
 check with the real headers (MinGW-w64 + libc++ for the launcher). Not verified: a full build.
 
-## Imports still to write (static estimate, 29 of 445 left to the host runtime)
-- libkernel: `__Ux86_64_setcontext`, `msync`, `sceKernelUtimes`, `scePthreadGet/Setschedparam`,
-  `sigreturn`
-- libScePosix: `sem_init/destroy/post/wait/timedwait`
-- ErrorDialog (4), Http (`CreateConnection`, `CreateRequest2`, `RemoveRequestHeader`,
-  `UriParse`), NpUtility `LookupCreateRequest`, InvitationDialog `Open`, ImeDialog
-  `GetPanelSize`: likely fine as "not available" stubs
-- AppContent `AddcontMount/Unmount`, SystemService `GetDisplaySafeAreaInfo`, VideoRecording
-  `SetInfo`, GameLiveStreaming `GetCurrentStatus`, Voice `GetResourceInfo`, DiscMap `ioKMruft1ek`
-  (no name in aerolib)
-NpScore and NpInGameMessage are already answered as unavailable by `src/runtime_net.c` (by
-prefix); `tools/module_imports.py` knows that now. An unresolved import doesn't stop loading:
-it's bound to a trap that stops the game when called.
+## First boot (2026-11-15, branch `first-boot`)
+Run here with the headless build (`tools/headless/build.sh`: the real loader and runtime, stand-ins
+for the GPU library, SDL3 and the Vulkan check; `--cpu-only`), on the EU dump:
+- Fixed: the runtime read the libc param at SceProcParam +0x30 (the stack size for this SDK) and
+  crashed before the game's entry; it now follows shadPS4's layout (+0x38) and checks the block.
+- Deadpool then runs its C++ static initialisation (1,125 handlers), starts 11 threads (8 pool
+  threads, Fios), loads its system modules, logs user 1 in, allocates 3.4 GB of direct memory
+  and stops at its first graphics call, `sceGnmDrawInitDefaultHardwareState200`, which the real
+  GPU library provides.
+- Implemented (all checked against the Windows headers too): POSIX semaphores (`sem_*`, with a
+  test: `sema-test --posix`), `scePthreadGet/Setschedparam`, `msync`/`sceKernelMsync`,
+  `sceKernelUtimes`/`utimes`, `select` offline (the classic sleep), AppContent add-on
+  mount/unmount, the error dialog, `sceInvitationDialogOpen`, `sceImeDialogGetPanelSize`, the
+  display safe area, live-streaming status, video-recording SetInfo, voice resource info, and the
+  older PSN/HTTP request calls Deadpool uses (signed out / unplugged, as the rest).
+- Loader report (`--list-imports`): 391 runtime, 178 native, 65 unresolved: 62 graphics
+  (GnmDriver, VideoOut, `sceKernelCreateEqueue`: the GPU library's) and `sigreturn`,
+  `__Ux86_64_setcontext` (exception unwinding only; shadPS4 has neither).
+- The runtime's C tests did not link against `runtime_net.c` any more (it calls the loader's image
+  accessors); `tools/headless/stub_probe.c` provides them for test builds.
 
 ## Next
-- Review and merge `strip-ctr`, then build on Windows (`bash build.sh` in MSYS2 CLANG64).
-- Write the missing imports, run `--list-imports` with the built loader, then the first start.
+- Build on Windows (`bash build.sh` in MSYS2 CLANG64) and start the game: the next stops are
+  graphics (shadPS4's GnmDriver/VideoOut on UE3's command buffers) and the game data
+  (`TransGame/`, read through Fios).
+- Headless, to go further without a GPU: a null GPU in `tools/headless` (Gnm calls accepted,
+  VideoOut flips completed, kernel event queues) would let the CPU side run into loading.
 
 ## Rules
 - Only my own dumps. Never commit or publish game files or anything derived from them

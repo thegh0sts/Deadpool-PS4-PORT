@@ -161,6 +161,88 @@ static ABI int32_t sem_delete(uint32_t id) {
     pthread_mutex_unlock(&lock);
     return 0;
 }
+/* ---- POSIX semaphores (libScePosix sem_*): unnamed, process-private. The guest's sem_t holds a
+ * pointer to the host object, as on the PS4 (FreeBSD's sem_t is a pointer) and in shadPS4. Errors
+ * are -1 with the guest errno. sem_timedwait's deadline is absolute CLOCK_REALTIME, the host
+ * condition variable's default clock (Linux and winpthreads). ---- */
+typedef struct {
+    pthread_mutex_t lock;
+    pthread_cond_t event;
+    int32_t value;
+    uint32_t magic;
+} PosixSem;
+#define POSIX_SEM_LIVE 0x53656d31u /* "Sem1" */
+typedef struct { int64_t sec, nsec; } GuestTimespec;
+static size_t posix_sems;
+static int32_t posix_fail(int e) { *runtime_errno()=runtime_guest_errno(e); return -1; }
+static PosixSem *posix_sem(PosixSem **sem) {
+    return sem && *sem && (*sem)->magic==POSIX_SEM_LIVE ? *sem : NULL;
+}
+static ABI int32_t posix_sem_init(PosixSem **sem,int32_t shared,uint32_t value) {
+    (void)shared; /* one process: shared and private are the same */
+    if (!sem || value>INT32_MAX) return posix_fail(EINVAL);
+    PosixSem *s=calloc(1,sizeof(*s));
+    if (!s) return posix_fail(ENOSPC);
+    host_check(pthread_mutex_init(&s->lock,NULL));
+    host_check(pthread_cond_init(&s->event,NULL));
+    s->value=(int32_t)value; s->magic=POSIX_SEM_LIVE;
+    *sem=s;
+    pthread_mutex_lock(&lock); ++posix_sems; pthread_mutex_unlock(&lock);
+    return 0;
+}
+static ABI int32_t posix_sem_destroy(PosixSem **sem) {
+    PosixSem *s=posix_sem(sem);
+    if (!s) return posix_fail(EINVAL);
+    /* Kept, marked dead: a copy of the handle used later answers EINVAL instead of touching
+     * freed memory (as runtime_mutex.c does for mutexes). */
+    pthread_mutex_lock(&s->lock); s->magic=0; pthread_cond_broadcast(&s->event); pthread_mutex_unlock(&s->lock);
+    *sem=NULL;
+    return 0;
+}
+static ABI int32_t posix_sem_post(PosixSem **sem) {
+    PosixSem *s=posix_sem(sem);
+    if (!s) return posix_fail(EINVAL);
+    pthread_mutex_lock(&s->lock);
+    if (s->value==INT32_MAX) { pthread_mutex_unlock(&s->lock); return posix_fail(EOVERFLOW); }
+    ++s->value;
+    pthread_cond_signal(&s->event);
+    pthread_mutex_unlock(&s->lock);
+    return 0;
+}
+/* deadline: NULL waits forever, else absolute CLOCK_REALTIME. try: no wait at all. */
+static int32_t posix_sem_take(PosixSem **sem,const GuestTimespec *deadline,int try) {
+    PosixSem *s=posix_sem(sem);
+    if (!s) return posix_fail(EINVAL);
+    pthread_mutex_lock(&s->lock);
+    int e=0;
+    while (s->value<=0 && s->magic==POSIX_SEM_LIVE) {
+        if (try) { e=EAGAIN; break; }
+        if (deadline) {
+            if (deadline->nsec<0 || deadline->nsec>=1000000000) { e=EINVAL; break; }
+            struct timespec until={(time_t)deadline->sec,(long)deadline->nsec};
+            e=pthread_cond_timedwait(&s->event,&s->lock,&until);
+            if (e==ETIMEDOUT) break;
+            if (e) host_check(e);
+        } else host_check(pthread_cond_wait(&s->event,&s->lock));
+    }
+    if (!e && s->magic!=POSIX_SEM_LIVE) e=EINVAL;
+    if (!e) --s->value;
+    pthread_mutex_unlock(&s->lock);
+    return e ? posix_fail(e) : 0;
+}
+static ABI int32_t posix_sem_wait(PosixSem **sem) { return posix_sem_take(sem,NULL,0); }
+static ABI int32_t posix_sem_trywait(PosixSem **sem) { return posix_sem_take(sem,NULL,1); }
+static ABI int32_t posix_sem_timedwait(PosixSem **sem,const GuestTimespec *deadline) {
+    if (!deadline) return posix_fail(EINVAL);
+    return posix_sem_take(sem,deadline,0);
+}
+static ABI int32_t posix_sem_getvalue(PosixSem **sem,int32_t *value) {
+    PosixSem *s=posix_sem(sem);
+    if (!s || !value) return posix_fail(EINVAL);
+    pthread_mutex_lock(&s->lock); *value=s->value; pthread_mutex_unlock(&s->lock);
+    return 0;
+}
+
 /* Read-only test/diagnostic snapshot, not exposed to guest code. */
 unsigned runtime_sema_waiters(uint32_t id) {
     pthread_mutex_lock(&lock);
@@ -176,12 +258,18 @@ uintptr_t runtime_sema_resolve(const char *name) {
     if (runtime_nid_equals(name,"12wOHk8ywb0#libkernel")) return (uintptr_t)sem_poll;
     if (runtime_nid_equals(name,"4DM06U2BNEY#libkernel")) return (uintptr_t)sem_cancel;
     if (runtime_nid_equals(name,"R1Jvn8bSCW8#libkernel")) return (uintptr_t)sem_delete;
-    return 0;
+    /* POSIX semaphores: imported from libScePosix (or libkernel), matched by symbol name. */
+    static const RuntimeExport posix_exports[]={
+        {"sem_init",posix_sem_init}, {"sem_destroy",posix_sem_destroy}, {"sem_post",posix_sem_post},
+        {"sem_wait",posix_sem_wait}, {"sem_trywait",posix_sem_trywait}, {"sem_timedwait",posix_sem_timedwait},
+        {"sem_getvalue",posix_sem_getvalue},
+    };
+    return RUNTIME_LOOKUP(posix_exports,name);
 }
 void runtime_sema_report(void) {
     pthread_mutex_lock(&lock);
-    printf("Runtime: semaphores created=%zu, deleted=%zu, acquired=%zu, signals=%zu, timeouts=%zu\n",
-           created,deleted,acquired,signaled,timed_out);
+    printf("Runtime: semaphores created=%zu, deleted=%zu, acquired=%zu, signals=%zu, timeouts=%zu; POSIX semaphores=%zu\n",
+           created,deleted,acquired,signaled,timed_out,posix_sems);
     pthread_mutex_unlock(&lock);
 }
 

@@ -118,8 +118,41 @@ static void cancellation(void) {
     assert(pthread_join(second,NULL)==0 && (uint32_t)b.result==0x8002000d);
     assert((uint32_t)poll_sem(id,1)==0x80020003);
 }
+/* POSIX semaphores (libScePosix sem_*, Deadpool): -1 + errno, sem_t holds a pointer. */
+typedef int32_t (ABI *PInit)(void **,int32_t,uint32_t);
+typedef int32_t (ABI *POp)(void **);
+typedef int32_t (ABI *PTimed)(void **,const int64_t *);
+typedef struct { void **sem; POp wait; int32_t result; } PTask;
+static void *posix_waiter(void *arg) { PTask *t=arg; t->result=t->wait(t->sem); return NULL; }
+static void posix_semaphores(void) {
+    PInit init=GET(PInit,"pDuPEf3m4fI#libScePosix");
+    POp destroy=GET(POp,"cDW233RAwWo#libScePosix"), post=GET(POp,"IKP8typ0QUk#libScePosix"),
+        wait=GET(POp,"YCV5dGGBcCo#libScePosix");
+    PTimed timed=GET(PTimed,"w5IHyvahg-o#libScePosix");
+    assert(init && destroy && post && wait && timed);
+    void *sem=NULL;
+    assert(init(&sem,0,1)==0 && sem);
+    assert(wait(&sem)==0);                                  /* 1 -> 0 */
+    struct timespec now; clock_gettime(CLOCK_REALTIME,&now);
+    int64_t soon[2]={now.tv_sec,now.tv_nsec+20000000};      /* 20 ms */
+    if (soon[1]>=1000000000) { soon[0]++; soon[1]-=1000000000; }
+    assert(timed(&sem,soon)==-1 && *runtime_errno()==60);   /* ETIMEDOUT (FreeBSD) */
+    int64_t bad[2]={now.tv_sec,1000000000};
+    assert(timed(&sem,bad)==-1 && *runtime_errno()==22);    /* EINVAL */
+    PTask t={&sem,wait,-2}; pthread_t thread;
+    assert(pthread_create(&thread,NULL,posix_waiter,&t)==0);
+    struct timespec pause={0,20000000}; nanosleep(&pause,NULL);
+    assert(post(&sem)==0);                                   /* wakes the waiter */
+    assert(pthread_join(thread,NULL)==0 && t.result==0);
+    void *copy=sem;
+    assert(destroy(&sem)==0 && !sem);
+    assert(post(&copy)==-1 && *runtime_errno()==22);        /* a stale copy: EINVAL, no crash */
+    assert(init(NULL,0,0)==-1 && *runtime_errno()==22);
+    puts("PASS: POSIX semaphores");
+}
 int main(int argc,char **argv) {
     setup();
+    if (argc>1 && !strcmp(argv[1],"--posix")) { posix_semaphores(); return 0; }
     if (argc>1 && !strcmp(argv[1],"--priority")) {
         /* Priority semaphores block and are woken in FIFO order. */
         uint32_t id; assert(create(&id,"priority",2,0,1,NULL)==0);

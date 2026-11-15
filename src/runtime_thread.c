@@ -412,6 +412,17 @@ static ABI int32_t posix_setschedparam(GuestThread *t,int32_t policy,const Guest
     if (!param || policy<1 || policy>3) return 22;
     t->attr.policy=policy; t->attr.prio=param->priority; return 0;
 }
+/* scePthreadGetschedparam/Setschedparam: the same, with SCE kernel error codes. Priorities and
+ * policies are recorded for the game to read back; host threads keep the default scheduling,
+ * as with scePthreadSetprio. */
+static ABI int32_t thread_getschedparam(GuestThread *t,int32_t *policy,GuestSchedParam *param) {
+    const int32_t r=posix_getschedparam(t,policy,param);
+    return r ? ERR(r) : 0;
+}
+static ABI int32_t thread_setschedparam(GuestThread *t,int32_t policy,const GuestSchedParam *param) {
+    const int32_t r=posix_setschedparam(t,policy,param);
+    return r ? ERR(r) : 0;
+}
 
 /* POSIX (libScePosix) variants return positive errno values. */
 static int32_t posix(int32_t r) { return r ? (int32_t)((uint32_t)r&0xffff) : 0; }
@@ -448,6 +459,7 @@ uintptr_t runtime_thread_resolve(const char *name) {
         {"FJrT5LuUBAU",thread_exit},
         {"How7B8Oet6k#libkernel",thread_getname}, {"EI-5-jlq2dE#libkernel",thread_getthreadid}, {"qBDmpCyGssE#libkernel",thread_cancel},
         {"FIs3-UQT9sg",posix_getschedparam}, {"Xs9hdiD7sAA",posix_setschedparam},
+        {"P41kTWUS3EI#libkernel",thread_getschedparam}, {"oIRFTjoILbg#libkernel",thread_setschedparam},
     };
     for (size_t i=0;i<sizeof(table)/sizeof(*table);++i)
         if (runtime_nid_equals(name,table[i].nid)) return (uintptr_t)table[i].fn;

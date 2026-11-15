@@ -810,7 +810,19 @@ static ABI int32_t batch_map2(BatchEntry *entries, int count, int *processed, in
 static ABI int32_t batch_map(BatchEntry *entries, int count, int *processed) {
     return batch_map2(entries,count,processed,MAP_FIXED_FLAG);
 }
+/* msync: guest memory is host memory and the PS4 has no file-backed mappings the game could
+ * flush, so there is nothing to write back; a misaligned start is EINVAL as on FreeBSD. */
+static ABI int32_t posix_msync(void *address,uint64_t size,int flags) {
+    (void)size; (void)flags;
+    if ((uintptr_t)address & 0x3fff) { *runtime_errno()=22; return -1; }
+    return 0;
+}
+static ABI int32_t kernel_msync(void *address,uint64_t size,int flags) {
+    (void)size; (void)flags;
+    return ((uintptr_t)address & 0x3fff) ? (int32_t)0x80020016 : 0;
+}
 static const RuntimeExport exports[]={
+    {"msync",posix_msync}, {"sceKernelMsync",kernel_msync},
     {"sceKernelGetDirectMemorySize",direct_size}, {"sceKernelAllocateDirectMemory",direct_allocate},
     {"sceKernelMapDirectMemory",direct_map}, {"sceKernelMapNamedDirectMemory",direct_map_named},
     {"sceKernelReleaseDirectMemory",direct_release}, {"sceKernelMunmap",direct_unmap}, {"munmap",direct_unmap},

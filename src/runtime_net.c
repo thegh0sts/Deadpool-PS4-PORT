@@ -645,7 +645,11 @@ static void dw_test_key_ensure(void) {
             }
         }
     }
-    /* BB_DW_HANDLER_81_CRYPTO_CALL=1: force the crypto core call (0x1b060) in     * the 0x81 handler to return success (AL=1) without actually running it.     * The crypto core validates tickets with RSA/DH; our dummy tickets fail.     * Replacing the call at 0x1b9c3 (5 bytes) with mov al,1; nop*3 lets the     * handler proceed to send the 8-byte response which sets mode=2. */
+    /* BB_DW_HANDLER_81_CRYPTO_CALL=1: force the crypto core call (0x1b060) in
+     * the 0x81 handler to return success (AL=1) without actually running it.
+     * The crypto core validates tickets with RSA/DH; our dummy tickets fail.
+     * Replacing the call at 0x1b9c3 (5 bytes) with mov al,1; nop*3 lets the
+     * handler proceed to send the 8-byte response which sets mode=2. */
     {
         const char *h81=getenv("BB_DW_HANDLER_81_CRYPTO_CALL");
         if (h81 && !strcmp(h81,"1") && !dw_handler_81_crypto_call_applied) {
@@ -2231,7 +2235,13 @@ static const RuntimeExport exports[]={
 };
 /* Online: these contracts replace runtime_services.c's offline ones. Offline: nothing here. */
 uintptr_t runtime_net_resolve(const char *name) {
-    if (!online()) return 0;
+    if (!online()) {
+        /* Offline, sockets are the services module's (unplugged), but select() is also the
+         * classic portable sleep (no descriptors, a timeout): it is served either way; a socket
+         * in one of its sets answers EBADF, as no socket exists offline. */
+        const char *symbol=runtime_symbol(name);
+        return symbol && !strcmp(symbol,"select") ? (uintptr_t)posix_select : 0;
+    }
     const uintptr_t found=RUNTIME_LOOKUP(exports,name);
     if (found) return found;
     const char *library=strchr(name,'#');

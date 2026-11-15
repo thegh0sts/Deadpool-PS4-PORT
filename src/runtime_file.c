@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <utime.h>
 #ifdef _WIN32
 #include <windows.h>
 /* 64-bit sizes and times; directories are never opened as CRT descriptors. */
@@ -695,6 +696,22 @@ static int64_t do_access(const char *guest,int mode) {
 #endif
 }
 
+/* utimes(path, times[2]): FreeBSD timevals (64-bit seconds, 64-bit microseconds), access then
+ * modification time; NULL sets both to now. The game's own files (/app0) are read-only. Seconds
+ * precision (utime). */
+typedef struct { int64_t sec, usec; } GuestTimeval;
+static int64_t do_utimes(const char *guest,const GuestTimeval *times) {
+    if (!guest) return -EFAULT;
+    if (game_path(guest)) return -EROFS;
+    char path[1024];
+    int e=translate(guest,path,sizeof(path));
+    if (e) return -e;
+    if (save_path(guest)) current_copy(path,sizeof(path),1);
+    struct utimbuf t;
+    if (times) { t.actime=(time_t)times[0].sec; t.modtime=(time_t)times[1].sec; }
+    return utime(path,times ? &t : NULL) ? -errno : 0;
+}
+
 /* Convention adapters: sceKernel* -> Orbis error codes, POSIX -> -1 + errno. */
 static int64_t sce(int64_t r) { return r<0 ? ERR(runtime_guest_errno((int)-r)) : r; }
 static int64_t posix(int64_t r) { if (r<0) { *runtime_errno()=runtime_guest_errno((int)-r); return -1; } return r; }
@@ -728,6 +745,9 @@ static ABI int32_t sce_check_reachability(const char *p) {
     GuestStat s; return (int32_t)sce(do_stat(p,&s));
 }
 
+static ABI int64_t sce_utimes(const char *p,const GuestTimeval *t) { return sce(do_utimes(p,t)); }
+static ABI int64_t posix_utimes(const char *p,const GuestTimeval *t) { return posix(do_utimes(p,t)); }
+
 static const RuntimeExport exports[]={
     {"sceKernelOpen",sce_open}, {"open",posix_open}, {"_open",posix_open},
     {"sceKernelClose",sce_close}, {"close",posix_close}, {"_close",posix_close},
@@ -748,6 +768,7 @@ static const RuntimeExport exports[]={
     {"sceKernelMkdir",sce_mkdir}, {"mkdir",posix_mkdir},
     {"sceKernelRmdir",sce_rmdir}, {"rmdir",posix_rmdir},
     {"sceKernelUnlink",sce_unlink}, {"unlink",posix_unlink},
+    {"sceKernelUtimes",sce_utimes}, {"utimes",posix_utimes},
 };
 uintptr_t runtime_file_resolve(const char *name) { return RUNTIME_LOOKUP(exports,name); }
 /* Host-side helpers for other modules (e.g. SaveData, Fios). */

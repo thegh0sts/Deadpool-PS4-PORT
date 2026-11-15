@@ -207,7 +207,7 @@ static ABI int32_t voice_info(uint32_t port,uint32_t *info) {
 typedef struct { const char *name; int initialized, status; } Dialog;
 static Dialog dialogs[]={{"CommonDialog",0,0},{"MsgDialog",0,0},{"SaveDataDialog",0,0},
                          {"NpProfileDialog",0,0},{"NpCommerceDialog",0,0},{"ImeDialog",0,0},
-                         {"WebBrowserDialog",0,0},{"InvitationDialog",0,0}};
+                         {"WebBrowserDialog",0,0},{"InvitationDialog",0,0},{"ErrorDialog",0,0}};
 static int common_initialized;
 static ABI int32_t common_init(void) { common_initialized=1; return 0; }
 static int32_t dialog_init(int i) {
@@ -230,6 +230,7 @@ static int32_t dialog_term(int i) {
     static ABI int32_t tag##_status(void) { return dialog_status(i); } \
     static ABI int32_t tag##_term(void) { return dialog_term(i); }
 DIALOG(msg,1) DIALOG(save,2) DIALOG(profile,3) DIALOG(commerce,4) DIALOG(webbrowser,6) DIALOG(invitation,7)
+DIALOG(errordlg,8)
 /* SacredFire: the web browser and invitation dialogs close at once with a zeroed result (user
  * closed / no invitation sent); Close on the browser is accepted. */
 static ABI int32_t webbrowser_close(void) { if (!dialogs[6].initialized) return DIALOG_NOT_INITIALIZED; dialogs[6].status=3; return 0; }
@@ -608,6 +609,22 @@ static ABI int32_t contentexport_fail(void) { return CONTENT_EXPORT_UNAVAILABLE;
 static ABI int32_t livestream_init(uint64_t heap_size) { (void)heap_size; return 0; }
 static ABI int32_t livestream_term(void) { return 0; }
 static ABI int32_t livestream_enable(int32_t enable) { (void)enable; return 0; }
+/* OrbisGameLiveStreamingStatus (72 bytes): not on air, no spectators. */
+static ABI int32_t livestream_status(void *status) { if (status) memset(status,0,72); return 0; }
+/* SetInfo(info, value, size): accepted; nothing is recorded. */
+static ABI int32_t videorec_set_info(uint32_t info,const void *value,uint64_t size) { (void)info; (void)value; (void)size; return 0; }
+/* OrbisSystemServiceDisplaySafeAreaInfo: ratio 1.0 (the whole screen is safe), 128 reserved. */
+static ABI int32_t safe_area(void *info) {
+    if (!info) return (int32_t)0x80A10003; /* SYSTEM_SERVICE PARAMETER */
+    const float ratio=1.0f; memset(info,0,4+128); memcpy(info,&ratio,4); return 0;
+}
+/* OrbisVoiceResourceInfo (8 bytes): no voice resources in use. */
+static ABI int32_t voice_resource_info(void *info) { if (!info) return (int32_t)0x8029000b; memset(info,0,8); return 0; }
+/* ImeDialogGetPanelSize(param, width, height): the PS4's panel for this SDK (as shadPS4). */
+static ABI int32_t ime_panel_size(const void *param,uint32_t *width,uint32_t *height) {
+    if (!param || !width || !height) return (int32_t)0x80BC0001; /* IME_DIALOG INVALID_ADDRESS */
+    *width=0x319; *height=0x210; return 0;
+}
 /* Screenshots: the system's screenshot permission flag; nothing observes it here. */
 static ABI int32_t screenshot_toggle(void) { return 0; }
 /* NpManager/NpAuth "A" (account id) variants: the user is signed out. */
@@ -767,6 +784,23 @@ static const RuntimeExport exports[]={
     {"sceContentExportStart",contentexport_fail}, {"sceContentExportFromFile",contentexport_fail}, {"sceContentExportFinish",contentexport_fail},
     {"sceGameLiveStreamingInitialize",livestream_init}, {"sceGameLiveStreamingTerminate",livestream_term},
     {"sceGameLiveStreamingEnableLiveStreaming",livestream_enable},
+    {"sceGameLiveStreamingGetCurrentStatus",livestream_status},
+    {"sceVideoRecordingSetInfo",videorec_set_info},
+    {"sceSystemServiceGetDisplaySafeAreaInfo",safe_area},
+    {"sceVoiceGetResourceInfo",voice_resource_info},
+    {"sceImeDialogGetPanelSize",ime_panel_size},
+    {"sceErrorDialogInitialize",errordlg_init}, {"sceErrorDialogOpen",errordlg_open},
+    {"sceErrorDialogUpdateStatus",errordlg_status}, {"sceErrorDialogTerminate",errordlg_term},
+    {"sceInvitationDialogOpen",invitation_open},
+    /* Deadpool: the older request creators and the async score calls; signed out as the rest. */
+    {"sceNpCreateRequest",np_request}, {"sceNpAuthCreateRequest",np_request},
+    {"sceNpLookupCreateRequest",np_request_ctx}, {"sceNpWebApiSendRequest2",np_signed_out},
+    {"sceNpScoreGetFriendsRankingAsync",np_signed_out}, {"sceNpScoreGetRankingByNpIdAsync",np_signed_out},
+    {"sceNpScoreGetRankingByRangeAsync",np_signed_out}, {"sceNpScoreRecordScoreAsync",np_signed_out},
+    {"sceNpScorePollAsync",np_poll},
+    {"sceNpInGameMessageInitialize",np_signed_out}, {"sceNpInGameMessageTerminate",ok_void},
+    {"sceHttpCreateConnection",http_object}, {"sceHttpCreateRequest2",http_object},
+    {"sceHttpRemoveRequestHeader",ok_void}, {"sceHttpUriParse",http_fail},
     {"sceScreenShotEnable",screenshot_toggle}, {"sceScreenShotDisable",screenshot_toggle},
     {"sceNpCheckNpAvailabilityA",np_signed_out}, {"sceNpGetAccountIdA",np_account_id},
     {"sceNpGetParentalControlInfoA",np_signed_out}, {"sceNpGetUserIdByAccountId",np_signed_out},

@@ -5,7 +5,8 @@
 # missing imports and runtime bugs on a machine that cannot build the GPU library.
 # Warnings are not errors here (compilers differ from the release toolchains).
 # Needs: a C compiler and SDL3's headers (SDL3_INCLUDE, default: pkg-config sdl3).
-# Output: out/headless/sacredfire-headless.
+# Output: out/headless/sacredfire-headless. --test also builds and runs the runtime's C tests
+# (runtime, semaphores, event flags), with tools/headless/stub_probe.c for the loader's accessors.
 set -euo pipefail
 cd -- "$(dirname -- "$0")/../.."
 CC=${CC:-cc}
@@ -25,3 +26,11 @@ runtime=(src/runtime*.c)
     src/cpu_check.c src/isa_rewrite.c out/headless/isa_emulate.o tools/headless/stub_bbgpu.c \
     tools/headless/stub_sdl.c out/headless/libatrac9.a -lm -o out/headless/sacredfire-headless
 echo "Built out/headless/sacredfire-headless"
+if [[ ${1:-} == --test ]]; then
+    stubs=(tools/headless/stub_bbgpu.c tools/headless/stub_sdl.c tools/headless/stub_probe.c out/headless/libatrac9.a -lm)
+    for test in runtime sema eventflag; do
+        "$CC" -std=c11 -O2 -g -Wall -Wextra -pthread -I"$sdl" -I. -Isrc "tests/test_$test.c" "${runtime[@]}" "${stubs[@]}" \
+            -o "out/headless/$test-test"
+    done
+    (cd out/headless && ./runtime-test && ./sema-test && ./sema-test --posix && ./eventflag-test) | grep '^PASS'
+fi

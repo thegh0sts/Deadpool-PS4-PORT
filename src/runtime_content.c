@@ -113,7 +113,31 @@ static ABI int32_t addon_list(uint32_t service,void *list,uint32_t capacity,uint
     if (lists<=3) printf("Runtime: AppContent add-on list: %u of %u\n",n,addon_count);
     return 0;
 }
+/* AddcontMount(service label, entitlement label, mount point[16]): an add-on this profile
+ * reports gets /addcont<i> (shadPS4's naming). The port's add-ons carry only their license
+ * (content_profile.py reads no files), so nothing is served under it: a game that reads add-on
+ * files there finds none, which is logged. An add-on that is not reported is NOT_FOUND. */
+#define NOT_FOUND ((int32_t)0x80d90005)
+static unsigned mounts;
+static ABI int32_t addcont_mount(uint32_t service,const char *label,char *mount_point) {
+    require_initialized();
+    if (service>7 || !label || !mount_point) return PARAMETER;
+    for (uint32_t i=0;i<addon_count;++i) {
+        if (strncmp(label,addons[i],16)) continue;
+        snprintf(mount_point,16,"/addcont%u",i%64u); /* i < 64 */
+        if (mounts++<8) printf("Runtime: AppContent add-on %.16s mounted at %s (license only: no files under it)\n",label,mount_point);
+        return 0;
+    }
+    if (mounts++<8) printf("Runtime: AppContent add-on %.16s is not installed (mount refused)\n",label);
+    return NOT_FOUND;
+}
+static ABI int32_t addcont_unmount(const char *mount_point) {
+    require_initialized();
+    return mount_point ? 0 : PARAMETER;
+}
 uintptr_t runtime_content_resolve(const char *name) {
+    if (runtime_nid_equals(name,"VANhIWcqYak#libSceAppContent")) return (uintptr_t)addcont_mount;
+    if (runtime_nid_equals(name,"3rHWaV-1KC4#libSceAppContent")) return (uintptr_t)addcont_unmount;
     if (runtime_nid_equals(name,"g8cM39EUZ6o#libSceSysmodule")) return (uintptr_t)module_load;
     if (runtime_nid_equals(name,"fMP5NHUOaMk#libSceSysmodule")) return (uintptr_t)module_loaded;
     if (runtime_nid_equals(name,"eR2bZFAAU0Q#libSceSysmodule")) return (uintptr_t)module_unload;
