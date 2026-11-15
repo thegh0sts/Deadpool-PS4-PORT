@@ -271,7 +271,9 @@ def main():
                        '--patches-config', env.get('BB_PATCHES_CONFIG', data / 'patches.json'),
                        '--app-version', app_version, '--title-id', title_id, '--out', out,
                        '--settings', config,
-                       *(['--builtin', 'unlock_fps'] if fps == 'uncap' else []))
+                       *(['--builtin', 'unlock_fps'] if fps == 'uncap' else []),
+                       # BB_SCREEN_SIZE=2560x1080: the game's own screen size (ultrawide work).
+                       *(['--builtin', 'screen_size=' + env['BB_SCREEN_SIZE']] if env.get('BB_SCREEN_SIZE') else []))
             if fps == 'uncap':
                 # The game's own pacing (a flip every 2nd vblank) would still cap it.
                 env.setdefault('BB_IGNORE_FLIP_RATE', '1')

@@ -168,11 +168,29 @@ def compile_external(selected, segments, elf=None):
     return writes
 
 
+def screen_size_lines(value):
+    """screen_size=WxH: the game's screen size (GScreenWidth/GScreenHeight, 1920x1080), set once
+    by a small function that stores the two constants (ultrawide, step 1: render the scene wider).
+    The instructions are "movl $0x780,(%rax)" and "movl $0x438,(%rax)" 13 bytes apart."""
+    width,height=(int(v) for v in value.lower().split('x'))
+    if not (640<=width<=7680 and 360<=height<=4320): raise ValueError(f'screen size {value} out of range')
+    signature='c7 00 80 07 00 00 48 8d 05 ?? ?? ?? ?? c7 00 38 04 00 00'
+    return [(0x00b58bb9,width.to_bytes(4,'little'),signature,2),
+            (0x00b58bc6,height.to_bytes(4,'little'),signature,15)]
+
+
 def compile_builtin(names, segments, elf):
-    """Writes of the named BUILTIN_PATCHES (an unknown name, or a site not found: skipped)."""
+    """Writes of the named BUILTIN_PATCHES (an unknown name, or a site not found: skipped).
+    A name may carry a value: screen_size=2560x1080."""
     writes=[]
     for name in names:
         lines=BUILTIN_PATCHES.get(name)
+        if name.startswith('screen_size='):
+            try:
+                lines=screen_size_lines(name.partition('=')[2])
+            except ValueError as error:
+                print(f'Patches: {name}: {error}',file=sys.stderr)
+                continue
         if lines is None:
             print(f'Patches: no built-in patch {name!r}',file=sys.stderr)
             continue

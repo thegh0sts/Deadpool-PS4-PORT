@@ -143,3 +143,12 @@ Vulkan occlusion queries: the event at A begins a query, the one at A+8 ends it;
 CarriedScope ends and restarts the Vulkan query at render pass / command buffer boundaries, and
 the summed count is written to render backend 0's end word after the GPU finishes
 (SignalAfterGpu). BB_OCCLUSION=0 restores the stand-in.
+
+## Ultrawide (shelved)
+
+Started, then put on hold by the user. Findings so far: the game's screen size comes from two
+globals at 0x24e0578 / 0x24e057c (GScreenWidth/GScreenHeight), set to 1920x1080 by a small function
+at image+0x758bb0 (10 readers; one compares the width with 1280). `BB_SCREEN_SIZE=2560x1080`
+(run.py -> scripts/patches.py `--builtin screen_size=WxH`) patches those two constants; untested.
+Still to do: whether render targets, display buffers and the port's presenter follow; Hor+ field
+of view; HUD/Scaleform centred at 16:9; Bink videos pillarboxed; 21:9 output sizes in the launcher.
