@@ -28,11 +28,22 @@ static _Thread_local unsigned char *tls_blocks[TLS_MODULES];
 static void *process_param;
 void runtime_set_procparam(void *param) {
     process_param=param;
-    /* bbport: the game's libc heap settings (SceProcParam +0x30: SceLibcParam; its +0x10.. pointers to
-     * the heap size, delayed and extended allocation flags, initial size). */
+    /* bbport: the game's libc heap settings (SceLibcParam: its +0x10.. pointers to the heap size,
+     * delayed and extended allocation flags, initial size). SceProcParam is size, magic, entry
+     * count, SDK version, then pointers: process name, main thread name, priority, stack size,
+     * libc param (+0x38, as shadPS4's OrbisProcParam), memory param... Deadpool (SDK 2.50): +0x28
+     * priority 700, +0x30 stack size 0x500000, +0x38 libc param; reading +0x30 as the libc param
+     * dereferenced the stack size's neighbours. Only a block that looks like a SceLibcParam (a
+     * small size and entry count) is read; +0x30 is kept as a fallback for older layouts. */
     const uint64_t *p=(const uint64_t *)param;
-    if (!p || p[0]<0x38 || !p[6]) return;
-    const uint64_t *libc=(const uint64_t *)p[6];
+    if (!p || p[0]<0x38) return;
+    const uint64_t *libc=NULL;
+    for (int field=7; field>=6 && !libc; --field) {
+        if ((uint64_t)field*8+8>p[0] || !p[field]) continue;
+        const uint64_t *candidate=(const uint64_t *)p[field];
+        if (candidate[0]>=0x10 && candidate[0]<=0x200 && (uint32_t)candidate[1]<=0x40) libc=candidate;
+    }
+    if (!libc) { puts("Runtime: no libc param in the process param"); return; }
     printf("Runtime: libc param size %#llx, entries %u", (unsigned long long)libc[0], (unsigned)libc[1]);
     static const char *names[]={"heap size","delayed alloc","extended alloc","initial size"};
     for (int i=0;i<4 && (uint64_t)(2+i)*8<libc[0];++i) {
