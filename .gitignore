@@ -51,3 +51,8 @@ eboot.bin
 *.prx
 *.sprx
 boot*.bin
+# The player's own launcher artwork (art\banner.png, background.png, icon.ico/png): read at run
+# time, never committed or packaged. Only the project's emblem lives in packaging/windows/icons.
+/art/
+/packaging/windows/icons/*
+!/packaging/windows/icons/port.ico

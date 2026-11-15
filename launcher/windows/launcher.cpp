@@ -1362,7 +1362,25 @@ const ImVec4 kBorder{0.173f, 0.192f, 0.259f, 1.0f};
 ImFont* g_font_heading = nullptr;  // Segoe UI Semibold (section titles)
 ImFont* g_font_title = nullptr;    // Bahnschrift (the header, the Play button)
 float g_ui_scale = 1.0f;
-ID3D11ShaderResourceView* g_logo = nullptr;  // the app icon (LoadLogo)
+ID3D11ShaderResourceView* g_logo = nullptr;  // the app icon (LoadLogo), or art\icon.* (LoadArt)
+// Optional artwork the player keeps in <port>\art (LoadArt): never part of the repo or the
+// package, so it may be anything they like. banner.png fills the header, background.png the
+// window behind the tabs.
+ID3D11ShaderResourceView* g_banner = nullptr;
+ID3D11ShaderResourceView* g_background = nullptr;
+ImVec2 g_banner_size, g_background_size;
+
+/// UV corners that crop an image of `image` size to fill a rectangle of `box` size (cover).
+std::pair<ImVec2, ImVec2> CoverUv(ImVec2 image, ImVec2 box) {
+    if (image.x <= 0 || image.y <= 0 || box.x <= 0 || box.y <= 0) return {ImVec2(0, 0), ImVec2(1, 1)};
+    const float ia = image.x / image.y, ba = box.x / box.y;
+    if (ia > ba) {  // wider: crop the sides
+        const float w = ba / ia;
+        return {ImVec2((1 - w) * 0.5f, 0), ImVec2((1 + w) * 0.5f, 1)};
+    }
+    const float h = ia / ba;  // taller: crop top and bottom
+    return {ImVec2(0, (1 - h) * 0.5f), ImVec2(1, (1 + h) * 0.5f)};
+}
 const char* g_goto_tab = nullptr;             // a tab to bring to front on the next frame
 void PlaySummary();
 std::string EditionLabel();
@@ -3614,7 +3632,19 @@ void Header() {
     const float height = 74.0f * s;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImU32 left = IM_COL32(0x2A, 0x1B, 0x3E, 0xFF), right = IM_COL32(0x15, 0x19, 0x2A, 0xFF);
-    dl->AddRectFilledMultiColor(win, ImVec2(win.x + width, win.y + height), left, right, right, left);
+    if (g_banner) {
+        // art\banner.png, cropped to fill the bar; the left and right ends darkened for the title
+        // and the status labels.
+        const auto [uv0, uv1] = CoverUv(g_banner_size, ImVec2(width, height));
+        dl->AddImage(ImTextureRef(ImTextureID(reinterpret_cast<intptr_t>(g_banner))), win,
+                     ImVec2(win.x + width, win.y + height), uv0, uv1);
+        const ImU32 shade = IM_COL32(0, 0, 0, 0xA0), clear = IM_COL32(0, 0, 0, 0);
+        dl->AddRectFilledMultiColor(win, ImVec2(win.x + width * 0.35f, win.y + height), shade, clear, clear, shade);
+        dl->AddRectFilledMultiColor(ImVec2(win.x + width * 0.70f, win.y), ImVec2(win.x + width, win.y + height), clear,
+                                    shade, shade, clear);
+    } else {
+        dl->AddRectFilledMultiColor(win, ImVec2(win.x + width, win.y + height), left, right, right, left);
+    }
     dl->AddRectFilledMultiColor(ImVec2(win.x, win.y + height - 3 * s), ImVec2(win.x + width, win.y + height),
                                 IM_COL32(0xFF, 0x7A, 0x18, 0xFF), IM_COL32(0xFF, 0xD2, 0x3F, 0xFF),
                                 IM_COL32(0xFF, 0xD2, 0x3F, 0xFF), IM_COL32(0xFF, 0x7A, 0x18, 0xFF));
@@ -3703,11 +3733,22 @@ void Frame() {
     App& a = g_app;
     PollJobs();
     const ImGuiViewport* vp = ImGui::GetMainViewport();
+    if (g_background) {
+        // art\background.png behind everything, cropped to fill; the window over it is see-through.
+        const auto [uv0, uv1] = CoverUv(g_background_size, vp->WorkSize);
+        ImGui::GetBackgroundDrawList()->AddImage(ImTextureRef(ImTextureID(reinterpret_cast<intptr_t>(g_background))),
+                                                 vp->WorkPos, ImVec2(vp->WorkPos.x + vp->WorkSize.x, vp->WorkPos.y + vp->WorkSize.y),
+                                                 uv0, uv1);
+        ImVec4 bg = kBg;
+        bg.w = 0.86f;
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, bg);
+    }
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
     ImGui::Begin("launcher", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus);
+    if (g_background) ImGui::PopStyleColor();
     Header();
 
     if (!a.notice.empty()) {
@@ -4058,6 +4099,81 @@ void LoadLogo(HINSTANCE instance) {
     g_logo = MakeTexture(pixels.data(), px, px);
 }
 
+/// The size of a texture made by MakeTexture.
+ImVec2 TextureSize(ID3D11ShaderResourceView* view) {
+    ImVec2 size;
+    if (!view) return size;
+    ID3D11Resource* resource = nullptr;
+    view->GetResource(&resource);
+    ID3D11Texture2D* texture = nullptr;
+    if (resource && SUCCEEDED(resource->QueryInterface(IID_PPV_ARGS(&texture)))) {
+        D3D11_TEXTURE2D_DESC desc{};
+        texture->GetDesc(&desc);
+        size = ImVec2(float(desc.Width), float(desc.Height));
+        texture->Release();
+    }
+    if (resource) resource->Release();
+    return size;
+}
+
+/// The player's own artwork in <port>\art, if any: banner.png (the header, ~1400x150),
+/// background.png (the window, any size, cropped to fill) and icon.ico or icon.png (the
+/// header logo, and with icon.ico the window and taskbar icon). Read at run time, never built
+/// into the launcher: the folder is the player's (.gitignore), not the project's.
+void LoadArt(HWND hwnd) {
+    const fs::path dir = g_app.root / L"art";
+    std::error_code ec;
+    if (!fs::is_directory(dir, ec)) return;
+    auto png = [&](const wchar_t* name, ImVec2* size) -> ID3D11ShaderResourceView* {
+        const fs::path path = dir / name;
+        if (!fs::is_regular_file(path, ec)) return nullptr;
+        ID3D11ShaderResourceView* view = PngTexture(ReadText(path));
+        if (view && size) *size = TextureSize(view);
+        return view;
+    };
+    g_banner = png(L"banner.png", &g_banner_size);
+    g_background = png(L"background.png", &g_background_size);
+    const fs::path ico = dir / L"icon.ico";
+    if (fs::is_regular_file(ico, ec)) {
+        HICON big = static_cast<HICON>(LoadImageW(nullptr, ico.c_str(), IMAGE_ICON, GetSystemMetrics(SM_CXICON),
+                                                  GetSystemMetrics(SM_CYICON), LR_LOADFROMFILE));
+        HICON small = static_cast<HICON>(LoadImageW(nullptr, ico.c_str(), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+                                                    GetSystemMetrics(SM_CYSMICON), LR_LOADFROMFILE));
+        if (big) SendMessageW(hwnd, WM_SETICON, ICON_BIG, LPARAM(big));
+        if (small) SendMessageW(hwnd, WM_SETICON, ICON_SMALL, LPARAM(small));
+        // The header logo from the 128 px image.
+        HICON logo = static_cast<HICON>(LoadImageW(nullptr, ico.c_str(), IMAGE_ICON, 128, 128, LR_LOADFROMFILE));
+        if (logo) {
+            ICONINFO ii{};
+            if (GetIconInfo(logo, &ii) && ii.hbmColor) {
+                std::vector<uint32_t> pixels(128 * 128);
+                BITMAPINFO bi{};
+                bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                bi.bmiHeader.biWidth = 128;
+                bi.bmiHeader.biHeight = -128;
+                bi.bmiHeader.biPlanes = 1;
+                bi.bmiHeader.biBitCount = 32;
+                bi.bmiHeader.biCompression = BI_RGB;
+                HDC dc = GetDC(nullptr);
+                const int rows = GetDIBits(dc, ii.hbmColor, 0, 128, pixels.data(), &bi, DIB_RGB_COLORS);
+                ReleaseDC(nullptr, dc);
+                if (rows == 128) {
+                    if (ID3D11ShaderResourceView* view = MakeTexture(pixels.data(), 128, 128)) {
+                        if (g_logo) g_logo->Release();
+                        g_logo = view;
+                    }
+                }
+            }
+            if (ii.hbmColor) DeleteObject(ii.hbmColor);
+            if (ii.hbmMask) DeleteObject(ii.hbmMask);
+            DestroyIcon(logo);
+        }
+    } else if (ID3D11ShaderResourceView* view = png(L"icon.png", nullptr)) {
+        if (g_logo) g_logo->Release();
+        g_logo = view;
+    }
+}
+
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 #ifdef LAUNCHER_SELFTEST
     // Test build only (CMake never defines it): file operations without the window.
@@ -4176,6 +4292,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     ImGui_ImplDX11_Init(g_device, g_context);
     LoadLogo(instance);
     LoadState();
+    LoadArt(hwnd);
 
     bool done = false;
     while (!done) {
@@ -4225,6 +4342,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     Pads::Stop();
     ReleaseTrophies(g_trophies);
     if (g_logo) g_logo->Release();
+    if (g_banner) g_banner->Release();
+    if (g_background) g_background->Release();
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
