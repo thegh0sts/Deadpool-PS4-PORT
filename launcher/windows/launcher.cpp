@@ -1644,10 +1644,11 @@ void PlayTab() {
         ImGui::PopStyleColor(3);
     } else {
         ImGui::BeginDisabled(!ready || busy || !a.python);
-        ImGui::PushStyleColor(ImGuiCol_Button, kAccent);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, kAccentHover);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, kAccentActive);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.08f, 0.06f, 0.04f, 1.0f));
+        // Deadpool red, white label.
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.84f, 0.15f, 0.18f, 1.0f));         // #D7262E
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.91f, 0.26f, 0.29f, 1.0f));  // #E8434A
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.69f, 0.12f, 0.15f, 1.0f));   // #B01E25
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
         if (ImGui::Button((std::string(ICON_PLAY "  ") + T("JUGAR", "PLAY")).c_str(), ImVec2(-FLT_MIN, play_height)))
             StartGame();
         ImGui::PopStyleColor(4);
@@ -3646,8 +3647,8 @@ void Header() {
         dl->AddRectFilledMultiColor(win, ImVec2(win.x + width, win.y + height), left, right, right, left);
     }
     dl->AddRectFilledMultiColor(ImVec2(win.x, win.y + height - 3 * s), ImVec2(win.x + width, win.y + height),
-                                IM_COL32(0xFF, 0x7A, 0x18, 0xFF), IM_COL32(0xFF, 0xD2, 0x3F, 0xFF),
-                                IM_COL32(0xFF, 0xD2, 0x3F, 0xFF), IM_COL32(0xFF, 0x7A, 0x18, 0xFF));
+                                IM_COL32(0xB8, 0x14, 0x1C, 0xFF), IM_COL32(0xE8, 0x2A, 0x32, 0xFF),
+                                IM_COL32(0xE8, 0x2A, 0x32, 0xFF), IM_COL32(0xB8, 0x14, 0x1C, 0xFF));
     const float pad = 18.0f * s, logo = 50.0f * s;
     float x = win.x + pad;
     if (g_logo) {
