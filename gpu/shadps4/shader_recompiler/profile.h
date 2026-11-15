@@ -54,6 +54,10 @@ struct Profile {
     bool needs_unorm_fixup{};
     bool needs_clip_distance_emulation{};
     bool supports_shader_stencil_export{};
+    /// deadpool-port: changes when the recompiler's output changes, so a pipeline cache made by
+    /// an older build (its size or value differs) is rebuilt instead of reused. 1: integer
+    /// constant one in vertex fetch swizzles.
+    u32 port_recompiler_revision{1};
 
     bool operator==(const Profile&) const = default;
 };

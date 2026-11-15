@@ -3,17 +3,24 @@
 
 #pragma once
 
+#include <bit>
+
 #include "shader_recompiler/ir/ir_emitter.h"
 #include "video_core/amdgpu/pixel_format.h"
 
 namespace Shader::IR {
 
 /// Applies a component swizzle to a vec4.
-inline Value ApplySwizzle(IREmitter& ir, const Value& vector, const AmdGpu::CompMapping& swizzle) {
+/// `integer`: the components hold integer bits (SINT/UINT formats). A component selected as
+/// constant one is then integer 1, as on the hardware, not the bits of 1.0f (deadpool-port:
+/// UE3's Scaleform UI fetches 16-bit SINT positions with w = SEL_1; with 1.0f's bits the shader
+/// converted w to 1065353216.0 and every UI quad collapsed to a point).
+inline Value ApplySwizzle(IREmitter& ir, const Value& vector, const AmdGpu::CompMapping& swizzle,
+                          bool integer = false) {
     // Constants are indexed as 0 and 1, and components are 4-7. Thus we can apply a swizzle
     // using two vectors and a shuffle, using one vector of constants and one of the components.
     const auto zero = ir.Imm32(0.f);
-    const auto one = ir.Imm32(1.f);
+    const auto one = integer ? ir.Imm32(std::bit_cast<float>(1u)) : ir.Imm32(1.f);
     const auto constants_vec = ir.CompositeConstruct(zero, one, zero, zero);
     const auto swizzled =
         ir.CompositeShuffle(constants_vec, vector, size_t(swizzle.r), size_t(swizzle.g),

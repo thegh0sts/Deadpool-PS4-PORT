@@ -125,3 +125,12 @@ covered by the flattened-user-data check. UE3 writes the V# tables into command 
 reuses every other frame, so the workers read a stale table: meshes drawn from the wrong
 streams. `ResolveVertexBuffers` now compares the worker's V#s with the in-order ones and falls
 back on any difference ("Draw preparation: stale vertex V#s ..." in the log).
+
+Title-screen UI (logo, brush stroke, button icon missing): the Scaleform UI's vertex shader
+9f40cdb7 fetches 16-bit SINT positions whose V# selects w = SEL_1. The recompiler filled that
+with the bits of 1.0f, which the shader then converts as an integer (1065353216.0), so every
+such quad collapsed. `ApplySwizzle` now takes `integer` (vertex fetch of SINT/UINT formats
+without conversion) and uses integer 1. `Shader::Profile::port_recompiler_revision` was added
+so pipeline caches from older builds are rebuilt (bump it when the recompiler output changes).
+Not changed yet: the same float-one default in buffer-format loads (lower_buffer_format_to_raw)
+and storage image reads.
