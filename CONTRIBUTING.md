@@ -1,12 +1,12 @@
-# Contributing to SacredFire
+# Contributing to Deadpool-PS4-PORT
 
 ## Game files
 
-SacredFire contains no game data and accepts none. Do not attach, paste or link eboot.bin,
+This port contains no game data and accepts none. Do not attach, paste or link eboot.bin,
 sce_module files, saves, dumps, decryption material or anything else from the game folder in
 issues, pull requests or discussions; such content is removed and the issue closed. The project
-does not help with obtaining or dumping the game. You need your own copy of
-*Crash Team Racing: Nitro-Fueled* (CUSA13795) and its 1.21 update.
+does not help with obtaining or dumping the game. You need your own copy of *Deadpool* (PS4, the
+European edition CUSA03528, version 01.00).
 
 Generated files derived from the game (`out/`, `user/`, logs of the game's own output) stay out
 of the repository too; `.gitignore` covers the usual places.
@@ -47,8 +47,7 @@ The AppImage is a GPL binary, so each published one has to match a published com
 
 ## Licenses
 
-SacredFire is GPL-2.0-or-later (see `LICENSE`), as are bbport and shadPS4 it is built on.
-Contributions are accepted under the same license. Third-party components keep theirs
-(README, *Credits and licenses*). The game patches in `patches/CrashTeamRacing.xml` are community
-work by illusion and TroyWarez from [illusionyy/PS-Game-Patch](https://github.com/illusionyy/PS-Game-Patch);
-keep the attribution when touching them.
+This port is GPL-2.0-or-later (see `LICENSE`), as are CTR-NitroFueled-PC, SacredFire, bbport and
+shadPS4 it is built on. Contributions are accepted under the same license. Third-party components
+keep theirs (README, *Credits and licenses*). Community patches added to `patches/` keep their
+authors' attribution.

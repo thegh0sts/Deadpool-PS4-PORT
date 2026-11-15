@@ -4,8 +4,8 @@
 Prepares and links the executable into OUT (scripts/prepare.py, scripts/link_modules.py with the
 profile's modules), names its imports from shadPS4's aerolib.inl (tools/gen_import_names.py;
 OUT/aerolib.inl, fetched once, or --aerolib), then looks each import up in the runtime's sources:
-src/ (symbol names in the export tables and resolvers, NID literals) and gpu/ (shadPS4
-LIB_FUNCTION registrations). Prints the imports nothing serves, grouped by library.
+src/ (symbol names in the export tables and resolvers, NID literals, the PSN service prefixes
+runtime_net.c answers as unavailable) and gpu/ (shadPS4 LIB_FUNCTION registrations). Prints the imports nothing serves, grouped by library.
 
 This is a static estimate from the sources. The built probe gives the exact answer:
 `out/sacredfire out/boot-linked.bin --import-names out/import_names.txt --list-imports`
@@ -29,14 +29,17 @@ GPU_SOURCES = ('gpu/shadps4/**/*.cpp', 'gpu/shim/**/*.cpp')
 
 
 def served_names():
-    """(symbol names, NIDs) the runtime's sources mention."""
+    """(symbol names, NIDs, symbol prefixes) the runtime's sources serve."""
     text = ''.join(p.read_text(errors='replace') for pattern in SOURCES for p in ROOT.glob(pattern)
                    if p.name != 'import_names.inc')
     symbols = set(re.findall(r'"([A-Za-z_][A-Za-z0-9_]*)"', text))
     nids = set(re.findall(r'"([A-Za-z0-9+/-]{11})(?:#[^"]*)?"', text))
     gpu = ''.join(p.read_text(errors='replace') for pattern in GPU_SOURCES for p in ROOT.glob(pattern))
     nids |= set(re.findall(r'LIB_FUNCTION\(\s*"([A-Za-z0-9+/-]{11})"', gpu))
-    return symbols, nids
+    # runtime_net.c: whole PSN services answered "unavailable" by symbol prefix.
+    net = (ROOT / 'src' / 'runtime_net.c').read_text(errors='replace')
+    prefixes = tuple(re.findall(r'\{"(sce[A-Za-z0-9]+)","[^"]*",\(int32_t\)0x', net))
+    return symbols, nids, prefixes
 
 
 def run(*args):
@@ -63,14 +66,14 @@ def main():
     run('scripts/link_modules.py', args.game, '--out', args.out, '--modules', *profile['modules'])
     run('tools/gen_import_names.py', '--out', args.out, *(['--aerolib', args.aerolib] if args.aerolib else []))
 
-    symbols, nids = served_names()
+    symbols, nids, prefixes = served_names()
     total = len(json.loads((args.out / 'link.json').read_text())['unresolved_imports'])
     missing = collections.defaultdict(list)
     for line in (args.out / 'import_names.txt').read_text().splitlines():
         if line.startswith('#') or not line.strip():
             continue
         nid, library, symbol = line.split()[:3]
-        if symbol not in symbols and nid not in nids:
+        if symbol not in symbols and nid not in nids and not (prefixes and symbol.startswith(prefixes)):
             missing[library].append(symbol if symbol != '?' else f'? ({nid})')
     count = sum(map(len, missing.values()))
     print(f"{profile['game']} {profile['title']}: {total} imports left to the host runtime after linking "

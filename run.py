@@ -20,8 +20,8 @@ import threading
 import time
 
 PORT = Path(__file__).resolve().parent
-TITLE_ID = 'CUSA13795'
-APP_VERSION = '01.21'
+TITLE_ID = 'CUSA03528'
+APP_VERSION = '01.00'
 RESTART_CODE = 75  # the game asks to be started again (in-game "Apply and restart")
 LOG = None  # last_run.log (or BB_SAVE_LOG's file): everything this launch prints
 
@@ -98,13 +98,6 @@ def find_executable(name):
     return None
 
 
-def ini_has(path, line):
-    try:
-        return any(l.strip() == line for l in Path(path).read_text(encoding='utf-8', errors='replace').splitlines())
-    except OSError:
-        return False
-
-
 def ini_value(path, key):
     try:
         for line in Path(path).read_text(encoding='utf-8', errors='replace').splitlines():
@@ -114,106 +107,6 @@ def ini_value(path, key):
     except OSError:
         pass
     return None
-
-
-# bbport.ini render_res (or a DLSS quality with temporal=dlss) picks the game's rendering path
-# (scripts/patches.py render_plan, docs/sacredfire/13-resolution.md): above 1080 and below it the
-# PS4 Pro path; the larger GPU heap of native 4K also takes more than the Pro's 5568 MiB of direct
-# memory.
-def apply_render_res(env, config):
-    sys.path.insert(0, str(PORT / 'scripts'))
-    try:
-        from patches import read_settings, render_plan
-    finally:
-        sys.path.pop(0)
-    plan = render_plan(read_settings(Path(config)))
-    if plan is None:
-        return
-    env['BB_NEO'] = '1' if plan['pro'] else '0'
-    if plan['heap'] and int(env.get('BB_DMEM_MB') or 0) < 7168:
-        env['BB_DMEM_MB'] = '7168'
-    path = 'PS4 Pro' if plan['pro'] else 'base PS4'
-    say(f'Internal resolution: {plan["label"]} ({path} rendering path)')
-
-
-def uw_disabled(game, config):
-    """Fallback when the ultrawide helpers are absent: 16:9, nothing to do."""
-    from types import SimpleNamespace
-    return SimpleNamespace(enabled=False, game=Path(game), config=str(config),
-                           render_config=str(config))
-
-
-def uw_aspect(config):
-    """bbport.ini aspect_ratio ('16:9' when unset)."""
-    try:
-        for line in Path(config).read_text(encoding='utf-8', errors='replace').splitlines():
-            key, sep, value = line.partition('=')
-            if sep and key.strip() == 'aspect_ratio':
-                return value.strip()
-    except OSError:
-        pass
-    return '16:9'
-
-
-def uw_prepare_native(port, data, env, game, config):
-    """v0.3 native ultrawide dispatch (Settings > Display > Aspect ratio).
-
-    bbport.ini aspect_ratio=16:9|21:9|32:9 drives scripts/ultrawide_dispatch.py;
-    a legacy patches.json toggle still applies when the aspect is 16:9/unset.
-    Missing helpers mean 16:9 (never a fatal error for normal launches).
-    """
-    sys.path.insert(0, str(Path(port) / 'scripts'))
-    try:
-        from ultrawide_dispatch import prepare as dispatch_prepare
-    except Exception as error:
-        print(f'Ultrawide: helpers not available ({error}); running 16:9', flush=True)
-        return uw_disabled(game, config)
-    try:
-        return dispatch_prepare(Path(port), Path(data), env, Path(game), str(config))
-    finally:
-        try:
-            sys.path.remove(str(Path(port) / 'scripts'))
-        except ValueError:
-            pass
-
-
-def uw_refresh_native(mode, env, config):
-    try:
-        sys.path.insert(0, str(PORT / 'scripts'))
-        from ultrawide_dispatch import refresh as dispatch_refresh
-        return dispatch_refresh(mode, env, config)
-    except Exception as error:
-        if getattr(mode, 'enabled', False):
-            raise
-        print(f'Ultrawide refresh skipped: {error}', flush=True)
-    finally:
-        try:
-            sys.path.remove(str(PORT / 'scripts'))
-        except ValueError:
-            pass
-
-
-def uw_shaders_native(mode, user_dir, out):
-    try:
-        sys.path.insert(0, str(PORT / 'scripts'))
-        from ultrawide_dispatch import shaders as dispatch_shaders
-        return dispatch_shaders(mode, user_dir, out)
-    except Exception as error:
-        if getattr(mode, 'enabled', False):
-            raise
-        print(f'Ultrawide shaders skipped: {error}', flush=True)
-    finally:
-        try:
-            sys.path.remove(str(PORT / 'scripts'))
-        except ValueError:
-            pass
-
-
-# Short names match the v1.0 external installer hook so its rewrite() can still
-# strip and re-apply cleanly on a v0.3 tree (backward compatibility).
-uw_prepare = uw_prepare_native
-uw_refresh = uw_refresh_native
-uw_shaders = uw_shaders_native
 
 
 # Online play (docs/sacredfire/15-online.md): off unless bbport.ini's online_server (or
@@ -286,38 +179,25 @@ def main():
         LOG = open(data / 'last_run.log', 'a' if restarted else 'w', encoding='utf-8', errors='replace')
     say(f'--- SacredFire launch {time.strftime("%Y-%m-%d %H:%M:%S")}{" (restart)" if restarted else ""}')
 
-    # BB_GAME_DIR: the merged CTR dump (update 1.21 copied over the base game).
+    # BB_GAME_DIR: the dumped game (Deadpool EU CUSA03528 01.00).
     game = Path(env.get('BB_GAME_DIR', PORT / 'orig' / TITLE_ID))
     if not (game / 'eboot.bin').is_file():
         if (game / 'Image0' / 'eboot.bin').is_file():
             fail(f'{game} has the PS4 PKG Tool layout (Image0 and Sc0): prepare it in the launcher first.')
         fail(f'No eboot.bin in {game} (set BB_GAME_DIR to your {TITLE_ID} folder).')
-    # The game check compares the executable image with the supported one (CTR NF 1.21).
+    # The game check compares the executable image with the supported one (Deadpool EU 01.00).
     check = subprocess.run([sys.executable, '-X', 'utf8', str(PORT / 'scripts' / 'game_check.py'), str(game)],
                            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                            text=True, encoding='utf-8', errors='replace', creationflags=no_console())
     if check.returncode:
         fail(check.stdout.strip() or 'Game check failed.', 2)
     env['BB_GAME_PROFILE'] = check.stdout.strip() or 'deadpool'
-    # The game's own title ID and version: the European edition (CUSA14876) has its own patches.
+    # The game's own title ID and version (patches.py picks the patch files for them).
     info = subprocess.run([sys.executable, '-X', 'utf8', str(PORT / 'scripts' / 'game_check.py'), '--info',
                            str(game)], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True,
                           encoding='utf-8', errors='replace', creationflags=no_console()).stdout.split()
     title_id, app_version = (info + [TITLE_ID, APP_VERSION][len(info):])[:2]
     say(f'Game profile: {env["BB_GAME_PROFILE"]} ({title_id} {app_version})')
-
-    # UltraWide v1.0 by tcosi: dispatch the selected aspect-ratio patch (Settings > Display). Made for
-    # CUSA13795; the European edition uses the ported data (scripts/ultrawide_eu.py, v0.4).
-    try:
-        if title_id not in (TITLE_ID, 'CUSA14876'):
-            if uw_aspect(config) in ('21:9', '32:9'):
-                say(f'Ultrawide: made for {TITLE_ID} and CUSA14876; {title_id} runs at 16:9')
-            uw_mode = uw_disabled(game, config)
-        else:
-            uw_mode = uw_prepare(PORT, data, env, game, config)
-    except RuntimeError as error:
-        fail(f'Ultrawide: {error}')
-    game, config = uw_mode.game, uw_mode.config
 
     original_game = game.resolve()
     game = Path(run_python('scripts/mods.py', game, '--out', out,
@@ -328,8 +208,8 @@ def main():
     try:
         run_python('scripts/prepare.py', game, '--out', out)
         run_python('scripts/link_libc.py', game, '--out', out)
-        run_python('scripts/link_modules.py', game, '--out', out, '--modules',
-                   'libc.prx', 'libSceFios2.prx', 'libSceNpToolkit2.prx')
+        modules = run_python('scripts/game_check.py', '--modules', game, capture=True).stdout.split()
+        run_python('scripts/link_modules.py', game, '--out', out, '--modules', *modules)
         # A failed rewrite prints its reason and the game starts without the table.
         isa_args = []
         if isa_rewrite_wanted(missing, env):
@@ -344,7 +224,6 @@ def main():
         run_python('scripts/content_profile.py', game, '--out', out, '--sku', env.get('BB_CONTENT_SKU', 'full'),
                    '--dlc-dir', env.get('BB_DLC_DIR', data / 'dlc'))
         env.setdefault('BB_NEO', '0')
-        apply_render_res(env, uw_mode.render_config if uw_mode.enabled else config)
         apply_online(env, config)
         say(f'PS4 Pro mode: {env["BB_NEO"]} (BB_NEO=1 turns it on)')
         user_dir = Path(env.get('BB_USER_DIR', data / 'user')).resolve()
@@ -378,23 +257,13 @@ def main():
                    '--content-profile', str(out / 'content.bin'), '--patches', str(out / 'patches.bin'),
                    '--app0', str(game), '--user', str(user_dir),
                    '--timeout', env.get('BB_TIMEOUT', '0'), *isa_args, *args]
-        first = True
         while True:
-            uw_refresh(uw_mode, env, config)
-            uw_shaders(uw_mode, user_dir, out)
-            if not first:  # the in-game menu may have changed render_res
-                apply_render_res(env, uw_mode.render_config if uw_mode.enabled else config)
-            first = False
             run_python('scripts/patches.py', '--patches-dir', env.get('BB_PATCHES_DIR', 'patches'),
                        '--patches-config', env.get('BB_PATCHES_CONFIG', data / 'patches.json'),
                        '--app-version', app_version, '--title-id', title_id, '--out', out,
-                       '--settings', uw_mode.render_config if uw_mode.enabled else config)
+                       '--settings', config)
             if user_vblank:
                 env['BB_VBLANK_HZ'] = user_vblank
-            elif ini_has(config, 'patch_60fps=1'):
-                # The game's own limiter paces frames; a 60 Hz vblank would quantize late frames.
-                env['BB_VBLANK_HZ'] = '480'
-                say('60 FPS patch on: virtual vblank 480 Hz')
             else:
                 env['BB_VBLANK_HZ'] = {'uncap': '480', '90': '90'}.get(fps, '60')
             # No stdin: an inherited pipe (Git Bash, MSYS2) cost the game its console output.

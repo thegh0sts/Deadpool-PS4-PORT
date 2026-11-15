@@ -32,19 +32,19 @@ class ProfileTests(unittest.TestCase):
             return bytes(header)+param
         with tempfile.TemporaryDirectory() as tmp:
             p=Path(tmp);(p/'sce_sys').mkdir()
-            (p/'sce_sys/param.sfo').write_bytes(sfo_bytes([('TITLE_ID','CUSA13795')]))
-            dlc=p/'dlc';(dlc/'kart/sce_sys').mkdir(parents=True)
-            (dlc/'a.pkg').write_bytes(pkg([('CATEGORY','ac'),('CONTENT_ID','UP0002-CUSA13795_00-CTRDELUXEPACK001'),('TITLE','Deluxe'),('TITLE_ID','CUSA13795')]))
+            (p/'sce_sys/param.sfo').write_bytes(sfo_bytes([('TITLE_ID','CUSA03528')]))
+            dlc=p/'dlc';(dlc/'addon2/sce_sys').mkdir(parents=True)
+            (dlc/'a.pkg').write_bytes(pkg([('CATEGORY','ac'),('CONTENT_ID','EP0002-CUSA03528_00-DPOOLADDON000001'),('TITLE','Deluxe'),('TITLE_ID','CUSA03528')]))
             (dlc/'other.pkg').write_bytes(pkg([('CATEGORY','ac'),('CONTENT_ID','UP0000-CUSA00001_00-SOMEOTHERGAME001'),('TITLE_ID','CUSA00001')]))
             (dlc/'broken.pkg').write_bytes(b'not a package')
-            (dlc/'kart/sce_sys/param.sfo').write_bytes(sfo_bytes([('CATEGORY','ac'),('CONTENT_ID','UP0002-CUSA13795_00-CTRCODEKART00001'),('TITLE_ID','CUSA13795')]))
+            (dlc/'addon2/sce_sys/param.sfo').write_bytes(sfo_bytes([('CATEGORY','ac'),('CONTENT_ID','EP0002-CUSA03528_00-DPOOLADDON000002'),('TITLE_ID','CUSA03528')]))
             content_profile.prepare(p,p/'out',dlc_dir=dlc)
             blob=(p/'out/content.bin').read_bytes()
             self.assertEqual(blob[:8],b'BBCONT02');self.assertEqual(struct.unpack_from('<I',blob,28)[0],2)
-            self.assertEqual({blob[32:48],blob[52:68]},{b'CTRDELUXEPACK001',b'CTRCODEKART00001'})
-            with patch.dict('os.environ',{'BB_DLC_DISABLED':'CTRCODEKART00001'}):
+            self.assertEqual({blob[32:48],blob[52:68]},{b'DPOOLADDON000001',b'DPOOLADDON000002'})
+            with patch.dict('os.environ',{'BB_DLC_DISABLED':'DPOOLADDON000002'}):
                 content_profile.prepare(p,p/'out',dlc_dir=dlc)
-            self.assertEqual((p/'out/content.bin').read_bytes()[28:52],struct.pack('<I',1)+b'CTRDELUXEPACK001'.ljust(20,b'\0'))
+            self.assertEqual((p/'out/content.bin').read_bytes()[28:52],struct.pack('<I',1)+b'DPOOLADDON000001'.ljust(20,b'\0'))
             with patch.dict('os.environ',{'BB_DLC':'0'}):
                 content_profile.prepare(p,p/'out',dlc_dir=dlc)
             self.assertEqual(len((p/'out/content.bin').read_bytes()),32)

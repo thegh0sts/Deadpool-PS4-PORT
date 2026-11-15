@@ -10,7 +10,7 @@ dlss_bridge\\build.bat) and the SDK's nvngx_dlss.dll, which NVIDIA's DLSS SDK li
 application redistribute; their licenses go in licenses\\.
 
 Needs MSYS2 (CLANG64) for the DLLs and for pacman, which tells THIRD-PARTY.txt which package,
-version and license each bundled DLL comes from. Output: dist/CTR-NitroFueled-PC-portable-windows.zip
+version and license each bundled DLL comes from. Output: dist/Deadpool-PS4-PORT-portable-windows.zip
 (+ the unpacked folder next to it, and its SHA256). Nothing from the user's own machine goes in:
 no user/ folder, no saves, no logs, no personal bbport.ini (the defaults are
 packaging/windows/portable/bbport.ini).
@@ -30,8 +30,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PORTABLE = ROOT / 'packaging' / 'windows' / 'portable'
 MSYS2 = Path(os.environ.get('MSYS2_ROOT', r'C:\msys64'))
 CLANG_BIN = MSYS2 / 'clang64' / 'bin'
-NAME = 'CTR-NitroFueled-PC-portable'
-LAUNCHER = 'CTR-NitroFueled-PC.exe'
+NAME = 'Deadpool-PS4-PORT-portable'
+LAUNCHER = 'Deadpool-PS4-PORT.exe'
 # The Python that runs run.py and scripts/ (python.org's "embeddable package": no installer, no
 # registry, no PATH). Pinned by version and SHA-256.
 PYTHON_VERSION = '3.14.8'
@@ -110,7 +110,7 @@ def third_party(dlls, python=None, dlss=False):
         packages.setdefault(m.group(1) if m else '(unknown)', {'version': m.group(2) if m else '', 'dlls': []})['dlls'].append(dll)
     lines = ['THIRD-PARTY SOFTWARE in bin\\',
              '=' * 60,
-             'CTR-NitroFueled-PC itself is GPL-2.0-or-later (see LICENSE). The libraries below are',
+             'Deadpool-PS4-PORT itself is GPL-2.0-or-later (see LICENSE). The libraries below are',
              'MSYS2 CLANG64 packages, copied unchanged next to sacredfire.exe. Each keeps its own',
              'license; the package page lists the source and the build recipe',
              '(https://packages.msys2.org/ and https://github.com/msys2/MINGW-packages).', '']
@@ -141,7 +141,7 @@ def third_party(dlls, python=None, dlss=False):
               'Q2RTX project from AMD-published FSR 4 source (MIT, Copyright (c) 2025 Advanced',
               'Micro Devices, Inc.; see fsr4_shaders\\LICENSE-FSR4-v07.txt), run through',
               'https://github.com/FireBurn/FSR-Vulkan (MIT).', '']
-    lines += ['The launcher (CTR-NitroFueled-PC.exe) and sacredfire.exe include Dear ImGui (MIT,',
+    lines += ['The launcher (Deadpool-PS4-PORT.exe) and sacredfire.exe include Dear ImGui (MIT,',
               'https://github.com/ocornut/imgui) and the other libraries listed in the repository.', '']
     lines += ['The game files are not included and are not covered by any of these licenses.',
               'Not affiliated with Sony, Activision or Beenox.', '']
@@ -240,19 +240,13 @@ def main():
     shutil.copy2(ROOT / 'run.py', folder)
     for script in (ROOT / 'scripts').glob('*.py'):
         shutil.copy2(script, folder / 'scripts')
-    # Data the scripts read next to them (v0.4: ultrawide_eu.json, the European executable port).
+    # Data the scripts read next to them.
     for data_file in (ROOT / 'scripts').glob('*.json'):
         shutil.copy2(data_file, folder / 'scripts')
-    # v0.3 native ultrawide data (manifests, baseline, shaders): needed by run.py.
-    for data in list((ROOT / 'scripts').glob('ultrawide_*_data')):
-        if data.is_dir():
-            # Prepared game views (view*/, several GB) and the EU work folder are per player.
-            shutil.copytree(data, folder / 'scripts' / data.name, dirs_exist_ok=True,
-                            ignore=shutil.ignore_patterns('view', 'view-building-*', 'eu'))
     # v0.4 FSR4 v07 weights (fsr4_shaders/, MIT per LICENSE-FSR4-v07.txt inside).
     if (ROOT / 'fsr4_shaders').is_dir():
         shutil.copytree(ROOT / 'fsr4_shaders', folder / 'fsr4_shaders', dirs_exist_ok=True)
-    for tool in ('gen_import_names.py', 'merge_update.py'):
+    for tool in ('gen_import_names.py',):
         shutil.copy2(ROOT / 'tools' / tool, folder / 'tools')
     for xml in (ROOT / 'patches').glob('*.xml'):
         shutil.copy2(xml, folder / 'patches')
@@ -264,8 +258,8 @@ def main():
     # bbport.default.ini, not bbport.ini: unzipping a new version over an old one keeps the
     # player's settings (run.py and the launcher copy the defaults when bbport.ini is missing).
     for source, target in (('bbport.default.ini', 'bbport.default.ini'),
-                           ('Jugar CTR Nitro-Fueled.bat', 'Jugar sin launcher.bat'),
-                           ('LEEME.txt', 'LEEME.txt')):
+                           ('Play Deadpool.bat', 'Play without the launcher.bat'),
+                           ('README.txt', 'README.txt')):
         write_text(folder / target, (PORTABLE / source).read_text(encoding='utf-8'))
     write_text(folder / 'LICENSE', (ROOT / 'LICENSE').read_text(encoding='utf-8'))
     (folder / 'THIRD-PARTY.txt').write_bytes(third_party(dlls, python, bool(dlss_files)).encode('utf-8'))

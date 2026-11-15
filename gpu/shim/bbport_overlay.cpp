@@ -383,8 +383,8 @@ void Menu() {
     bool keep_open = true;
     // SacredFire: the menu title.
     if (!ImGui::Begin(
-            BbSettings::MenuText("CTR Nitro-Fueled PC  ·  Insert / L3+R3###bbport_settings",
-                                 "CTR Nitro-Fueled PC  ·  Insert / L3+R3###bbport_settings"),
+            BbSettings::MenuText("Deadpool PS4 Port  ·  Insert / L3+R3###bbport_settings",
+                                 "Deadpool PS4 Port  ·  Insert / L3+R3###bbport_settings"),
             &keep_open, ImGuiWindowFlags_NoCollapse)) {
         ImGui::End();
         return;
@@ -674,8 +674,7 @@ void Menu() {
         "Выключена: всё рисуется в разрешении пресета, смена — через перезапуск. Авто включает "
         "её на мощных дискретных видеокартах. Применяется после перезапуска игры."));
     }
-    // Game patches (patches/CrashTeamRacing.xml): bbport's own game-effect patches went with its
-    // Bloodborne profile (removed 2026-10-09).
+    // Game patches (patches/*.xml, BbSettings::GamePatches): none for Deadpool yet.
     // v0.4: the menu in tabs, in the launcher's look (ApplyMenuTheme).
     if (!ImGui::BeginTabBar("menu_tabs")) {
         ImGui::End();
@@ -684,10 +683,11 @@ void Menu() {
     const bool picture_tab = ImGui::BeginTabItem(BbSettings::MenuText("Picture", "Изображение"));
     if (picture_tab) {
     MenuSection(BbSettings::MenuText("Resolution and upscaling", "Разрешение и апскейл"));
-    // SacredFire: the scene resolution (render_res) replaces the 1080p Pro patch's checkbox; a
-    // DLSS quality mode sets it instead (scripts/patches.py render_plan).
+    // SacredFire: the scene resolution (render_res) worked through CTR's own render scale and
+    // PS4 Pro path (patched by CTR-NitroFueled-PC's scripts/patches.py, removed with its CTR
+    // profile): nothing applies it for Deadpool, so it shows only with BB_UPSCALER_MENU=1.
     const bool dlss_sized = s.temporal == BbSettings::TemporalDlss && s.dlss_quality > 0;
-    {
+    if (upscaler_menu) {
         static const char* labels[] = {"854 x 480", "1280 x 720", "1920 x 1080",
                                        "2560 x 1440 (PS4 Pro)", "2880 x 1620", "3840 x 2160 (4K)"};
         const int current = s.render_res;
@@ -717,6 +717,8 @@ void Menu() {
     }
     // SacredFire: one upscaler at a time (bbport.ini temporal): FSR 1 (spatial) or the temporal
     // ones, FSR 3, DLSS and FSR 4 (vk_ctr_fsr3). Live; DLSS's quality mode and output need a restart.
+    // The temporal ones find CTR's G-buffer, depth and motion vectors (vk_ctr_fsr3) and are not
+    // retargeted to Deadpool's renderer yet: listed only with BB_UPSCALER_MENU=1.
     {
         // Labels by setting value (BbSettings::Temporal); the list shows them in `order`.
         static constexpr const char* labels[BbSettings::TemporalCount] = {
@@ -727,6 +729,9 @@ void Menu() {
         const int current = std::clamp(s.temporal.load(), 0, BbSettings::TemporalCount - 1);
         if (ImGui::BeginCombo(BbSettings::MenuText("Upscaling", "Апскейл"), BbSettings::Label(labels[current]))) {
             for (const int t : order) {
+                if (!upscaler_menu && t != BbSettings::TemporalOff && t != BbSettings::TemporalFsr1) {
+                    continue;
+                }
                 if (ImGui::Selectable(BbSettings::Label(labels[t]), t == current)) {
                     Store(s.temporal, t, t != current);
                 }
@@ -742,8 +747,9 @@ void Menu() {
             "детали за несколько кадров. DLSS нужна видеокарта RTX. Применяется сразу."));
     }
     // SacredFire: frame generation (bbport.ini framegen=off|fsr3): one interpolated frame
-    // between each pair of game frames, shown halfway between them. Live.
-    {
+    // between each pair of game frames, shown halfway between them. Live. Tuned on CTR: listed
+    // only with BB_UPSCALER_MENU=1 until it is tried on Deadpool.
+    if (upscaler_menu) {
         static constexpr const char* fg_modes[BbSettings::FrameGenCount] = {
             "Off", "AMD FSR 3 (experimental)"};
         const int fg = std::clamp(s.framegen.load(), 0, BbSettings::FrameGenCount - 1);
@@ -779,12 +785,12 @@ void Menu() {
                 ImGui::EndCombo();
             }
             Hint(BbSettings::MenuText(
-                "Optical flow follows what moves on screen, karts included. The game's motion "
-                "needs FSR 3/4 or DLSS and moves karts with the camera, which can smear them.",
+                "Optical flow follows what moves on screen. The game's motion needs FSR 3/4 or "
+                "DLSS and can smear objects that move with the camera.",
                 "Оптический поток следует за тем, что движется на экране."));
         }
     }
-    if (s.temporal == BbSettings::TemporalDlss) {
+    if (upscaler_menu && s.temporal == BbSettings::TemporalDlss) {
         static constexpr const char* qualities[BbSettings::DlssQualityCount] = {
             "Auto (internal resolution)", "DLAA (native)", "Quality", "Balanced", "Performance",
             "Ultra Performance"};
@@ -829,25 +835,26 @@ void Menu() {
             "CNN: the older model (preset E), lighter; NVIDIA marks it deprecated. Applies at once.",
             "Transformer: текущая модель NVIDIA. CNN: старая, легче. Применяется сразу."));
     }
-    if (s.temporal == BbSettings::TemporalFsr3 || s.temporal == BbSettings::TemporalFsr4) {
+    if (upscaler_menu && (s.temporal == BbSettings::TemporalFsr3 || s.temporal == BbSettings::TemporalFsr4)) {
         Slider(BbSettings::MenuText("FSR 3 sharpness", "Резкость FSR 3"), s.fsr3_sharpness, 0.0f, 1.0f);
     }
 
     ImGui::EndTabItem();
     }
     if (ImGui::BeginTabItem(BbSettings::MenuText("Game", "Игра"))) {
+    if (BbSettings::GamePatchCount > 0) {
     MenuSection(BbSettings::MenuText("Game patches (restart required)", "Патчи игры (после перезапуска)"));
     for (int g = 0; g < BbSettings::GamePatchCount; ++g) {
         const auto& patch = BbSettings::GamePatches[g];
-        if (std::strcmp(patch.key, "patch_pro_1080p") == 0) continue; // see Internal resolution
         const bool before = s.game_patches[g];
         Checkbox(BbSettings::MenuText(patch.label, patch.label_ru), s.game_patches[g]);
         if (before != s.game_patches[g]) {
             std::printf("Menu: %s = %d (applies after the restart)\n", patch.key, int(s.game_patches[g]));
         }
     }
-    Hint(BbSettings::MenuText("From patches/CrashTeamRacing.xml (illusionyy/PS-Game-Patch), applied to the executable at start.",
-                              "Из patches/CrashTeamRacing.xml (illusionyy/PS-Game-Patch), применяются к исполняемому файлу при запуске."));
+    Hint(BbSettings::MenuText("From patches/*.xml, applied to the executable at start.",
+                              "Из patches/*.xml, применяются к исполняемому файлу при запуске."));
+    }
 
     ImGui::EndTabItem();
     }

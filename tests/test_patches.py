@@ -1,11 +1,11 @@
-from paths import ROOT
+from paths import ROOT  # noqa: F401 (sets up the import path)
 import json
 import struct
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
-import patches
 from patches import (EBOOT_BASE, GAME_PATCH_KEYS, compile_external, eboot_segments, encode,
                      external_patches, external_selection, read_settings, write_blob)
 
@@ -13,17 +13,17 @@ SEGMENTS = [(0, 0x6000000)]
 
 EXTERNAL = """<?xml version="1.0"?>
 <Patch>
-  <TitleID><ID>CUSA13795</ID></TitleID>
-  <Metadata Title="CTR" Name="On" Author="x" PatchVer="1.0" AppVer="01.21" AppElf="eboot.bin" isEnabled="true">
+  <TitleID><ID>CUSA03528</ID></TitleID>
+  <Metadata Title="Deadpool" Name="On" Author="x" PatchVer="1.0" AppVer="01.00" AppElf="eboot.bin" isEnabled="true">
     <PatchList><Line Type="bytes" Address="0x00500000" Value="9090"/></PatchList>
   </Metadata>
-  <Metadata Title="CTR" Name="Off" Author="x" PatchVer="1.0" AppVer="01.21" AppElf="eboot.bin">
+  <Metadata Title="Deadpool" Name="Off" Author="x" PatchVer="1.0" AppVer="01.00" AppElf="eboot.bin">
     <PatchList><Line Type="bytes32" Address="0x00500010" Value="0x11223344"/></PatchList>
   </Metadata>
-  <Metadata Title="CTR" Name="Mask" Author="x" PatchVer="1.0" AppVer="01.21" AppElf="eboot.bin" isEnabled="true">
+  <Metadata Title="Deadpool" Name="Mask" Author="x" PatchVer="1.0" AppVer="01.00" AppElf="eboot.bin" isEnabled="true">
     <PatchList><Line Type="mask" Address="" Value="90 90"/></PatchList>
   </Metadata>
-  <Metadata Title="CTR" Name="Old" Author="x" PatchVer="1.0" AppVer="01.00" AppElf="eboot.bin" isEnabled="true">
+  <Metadata Title="Deadpool" Name="Old" Author="x" PatchVer="1.0" AppVer="01.98" AppElf="eboot.bin" isEnabled="true">
     <PatchList><Line Type="bytes" Address="0x00500020" Value="90"/></PatchList>
   </Metadata>
 </Patch>
@@ -35,7 +35,7 @@ class ExternalPatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             (folder / 'extra.xml').write_text(EXTERNAL)
-            (folder / 'other.xml').write_text(EXTERNAL.replace('CUSA13795', 'CUSA99999'))
+            (folder / 'other.xml').write_text(EXTERNAL.replace('CUSA03528', 'CUSA99999'))
             found = external_patches(folder)
             self.assertEqual([key for key, _, _ in found], ['extra.xml/On', 'extra.xml/Off', 'extra.xml/Mask'])
             # isEnabled selects On and Mask; Mask is skipped whole for its unsupported line.
@@ -43,18 +43,6 @@ class ExternalPatchTests(unittest.TestCase):
             self.assertEqual(writes, [(0x100000, b'\x90\x90')])
             config = folder / 'patches.json'
             config.write_text(json.dumps({'enabled': ['extra.xml/Off'], 'disabled': ['extra.xml/On']}))
-            writes = compile_external(external_selection(found, config), SEGMENTS)
-            self.assertEqual(writes, [(0x100010, b'\x44\x33\x22\x11')])
-
-    def test_european_file_shares_the_menu_keys(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            folder = Path(tmp)
-            (folder / 'CrashTeamRacingEU.xml').write_text(EXTERNAL.replace('CUSA13795', 'CUSA14876'))
-            self.assertEqual(external_patches(folder), [])  # the US title skips it
-            found = external_patches(folder, title_id='CUSA14876')
-            config = folder / 'patches.json'
-            config.write_text(json.dumps({'enabled': ['CrashTeamRacing.xml/Off'],
-                                          'disabled': ['CrashTeamRacing.xml/On']}))
             writes = compile_external(external_selection(found, config), SEGMENTS)
             self.assertEqual(writes, [(0x100010, b'\x44\x33\x22\x11')])
 
@@ -97,8 +85,8 @@ def tiny_elf(code, vaddr=0x1000, offset=0x100):
 
 
 class SignatureTests(unittest.TestCase):
-    SIGNED = """<?xml version="1.0"?><Patch><TitleID><ID>CUSA13795</ID></TitleID>
-      <Metadata Title="CTR" Name="S" Author="x" AppVer="01.21" AppElf="eboot.bin" isEnabled="true">
+    SIGNED = """<?xml version="1.0"?><Patch><TitleID><ID>CUSA03528</ID></TitleID>
+      <Metadata Title="Deadpool" Name="S" Author="x" AppVer="01.00" AppElf="eboot.bin" isEnabled="true">
         <PatchList><Line Type="bytes" Address="{address}" Value="9090" Signature="aa bb ?? dd" SignatureOffset="0x2"/></PatchList>
       </Metadata></Patch>"""
 
@@ -113,7 +101,7 @@ class SignatureTests(unittest.TestCase):
         self.assertEqual(self.writes(elf, EBOOT_BASE + 0x1012), [(0x1012, b'\x90\x90')])
 
     def test_signature_moved(self):
-        # The 6.72+ build: the same code at another address.
+        # Another build: the same code at another address.
         elf = tiny_elf(b'\0' * 4 + b'\xaa\xbb\x07\xdd' + b'\0' * 24)
         self.assertEqual(self.writes(elf, EBOOT_BASE + 0x1012), [(0x1006, b'\x90\x90')])
 
@@ -123,80 +111,19 @@ class SignatureTests(unittest.TestCase):
         self.assertEqual(self.writes(twice, EBOOT_BASE + 0x1012), [])
 
 
-class RenderResTests(unittest.TestCase):
-    """render_res: the game's PS4 Pro render scale and GPU heap (docs/sacredfire/13-resolution.md)."""
-
-    def elf(self):
-        scale = bytes.fromhex(patches.RENDER_SCALE_SIGNATURE.replace(' ', ''))
-        heap = bytes.fromhex(patches.GPU_HEAP_SIGNATURE.replace(' ', ''))
-        # Both sites at their 5.05-build addresses inside one segment from 0x13a9000.
-        base = 0x13a9000
-        code = bytearray(0x1fbb940 - EBOOT_BASE - base + 16)
-        at = 0x17aa662 - EBOOT_BASE - base
-        code[at:at + len(scale)] = scale
-        at = 0x1fbb938 - EBOOT_BASE - base
-        code[at:at + len(heap)] = heap
-        return tiny_elf(bytes(code), vaddr=base)
-
-    def test_selection_follows_render_res(self):
-        found = external_patches(ROOT / 'patches')
-        pro = GAME_PATCH_KEYS['patch_pro_1080p']
-        keys = lambda ini: [k for k, _, _ in external_selection(found, None, ini)]
-        self.assertNotIn(pro, keys({'render_res': '1080', 'patch_pro_1080p': '1'}))
-        self.assertNotIn(pro, keys({'render_res': '2160', 'patch_pro_1080p': '1'}))
-        self.assertIn(pro, keys({'patch_pro_1080p': '1'}))  # older settings without render_res
-
-    def test_builtin_writes(self):
-        elf = self.elf()
-        segments = eboot_segments(elf)
-        self.assertEqual(patches.render_patches({'render_res': '1080'}), [])
-        self.assertEqual(patches.render_patches({'render_res': '1440'}), [])
-        writes = compile_external(patches.render_patches({'render_res': '1620'}), segments, elf)
-        self.assertEqual(writes, [(0x17aa662 - EBOOT_BASE, b'\xb8' + struct.pack('<f', 1.5))])
-        writes = compile_external(patches.render_patches({'render_res': '2160'}), segments, elf)
-        self.assertEqual(writes, [(0x17aa662 - EBOOT_BASE, b'\xb8' + struct.pack('<f', 2.0)),
-                                  (0x1fbb93e - EBOOT_BASE, b'\x70')])
-
-    def test_dlss_quality_picks_the_render_size(self):
-        plan = patches.render_plan
-        dlss = lambda q, out='1080': {'temporal': 'dlss', 'dlss_quality': q, 'dlss_output': out,
-                                       'render_res': '1440'}
-        self.assertEqual(plan(dlss('dlaa'))['pro'], False)          # native 1080p, base path
-        p = plan(dlss('performance'))                               # 540p to 1080p
-        self.assertAlmostEqual(p['scale'], 0.5)
-        self.assertTrue(p['pro'] and p['single'] and not p['heap'])
-        p = plan(dlss('quality', '2160'))                           # 1440p to 4K
-        self.assertAlmostEqual(p['scale'], 4 / 3)
-        self.assertTrue(p['pro'] and not p['single'] and not p['heap'])
-        self.assertTrue(plan(dlss('dlaa', '2160'))['heap'])         # native 4K
-        # Automatic (or another upscaler): render_res decides.
-        self.assertEqual(plan({**dlss('auto'), 'render_res': '720'})['label'], '720p')
-        self.assertEqual(plan({**dlss('quality'), 'temporal': 'fsr3'})['label'], '1440p')
-
-
 class GamePatchTests(unittest.TestCase):
-    """The bundled CTR patches, chosen through bbport.ini patch_* keys (the in-game menu)."""
-
-    def test_bundled_file_lists_every_menu_patch(self):
-        found = external_patches(ROOT / 'patches')
-        keys = {key for key, _, _ in found}
-        for patch in GAME_PATCH_KEYS.values():
-            self.assertIn(patch, keys)
-        self.assertEqual(external_patches(ROOT / 'patches', title_id='CUSA99999'), [])
-        self.assertEqual(external_patches(ROOT / 'patches', app_version='01.00'), [])
+    def test_no_bundled_patches_yet(self):
+        self.assertEqual(GAME_PATCH_KEYS, {})
+        self.assertEqual(external_patches(ROOT / 'patches'), [])
 
     def test_ini_keys_select_patches(self):
-        found = external_patches(ROOT / 'patches')
-        self.assertEqual(external_selection(found, None, {}), [])
-        selected = external_selection(found, None, {'patch_60fps': '1', 'patch_no_motion_blur': '0'})
-        self.assertEqual([key for key, _, _ in selected], ['CrashTeamRacing.xml/60 FPS Unlock'])
-        signature = selected[0][2].find('.//Line').get('Signature')
-        code = bytes(0 if b == '??' else int(b, 16) for b in signature.split())
-        start = 0x017a9d8b - EBOOT_BASE  # the 5.05 build's address for the signature
-        for at in (start, start + 0x40):  # 5.05 build; code moved (6.72+ build)
-            elf = tiny_elf(b'\0' * (at - 0x13a9d00) + code + b'\0' * 32, vaddr=0x13a9d00)
-            writes = compile_external(selected, eboot_segments(elf), elf)
-            self.assertEqual(writes, [(at + 5, bytes.fromhex('41899688040000'))])
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / 'extra.xml').write_text(EXTERNAL)
+            found = external_patches(Path(tmp))
+            keys = {'patch_test': 'extra.xml/Off'}
+            with unittest.mock.patch.dict(GAME_PATCH_KEYS, keys):
+                selected = external_selection(found, None, {'patch_test': '1'})
+            self.assertIn('extra.xml/Off', [key for key, _, _ in selected])
 
     def test_read_settings(self):
         with tempfile.TemporaryDirectory() as tmp:

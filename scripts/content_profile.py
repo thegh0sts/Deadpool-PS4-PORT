@@ -1,8 +1,8 @@
 """Prepare explicit offline AppContent metadata; SKU is a probe setting, not a license check.
 
 Add-ons (DLC): the player's own add-on packages for this game in --dlc-dir, as .pkg files (only
-their header and param.sfo are read; CTR Nitro-Fueled's DLC carry no extra data, the content is in
-the game) or as extracted folders (sce_sys/param.sfo). Each one found is reported installed to the
+their header and param.sfo are read: add-ons whose content is already in the game carry no extra
+data) or as extracted folders (sce_sys/param.sfo). Each one found is reported installed to the
 game, by its entitlement label (the end of its CONTENT_ID). Optional: without the folder the game
 runs as before. BB_DLC=0 turns them all off; BB_DLC_DISABLED=label,label turns some off.
 """

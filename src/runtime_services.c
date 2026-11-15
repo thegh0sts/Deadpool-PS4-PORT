@@ -7,7 +7,6 @@
 #define _GNU_SOURCE
 #include "runtime.h"
 #include "gpu/bbgpu.h"
-#include "ctr_trophies.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -405,19 +404,6 @@ static void trophy_load(void) {
     }
     if (f) fclose(f);
     trophy_total=listed ? listed : trophy_count_from_trp();
-    /* No trophies.tsv (the launcher writes it): CTR's own list (ctr_trophies.h). */
-    if (!listed && trophy_total==CTR_TROPHY_COUNT && (!strcmp(trophy_title,"CUSA13795") || !strcmp(trophy_title,"CUSA14876"))) {
-        const char *lang=getenv("BB_LANGUAGE");
-        const int es=lang && (!strcmp(lang,"3") || !strcmp(lang,"20"));
-        for (int i=0;i<CTR_TROPHY_COUNT;++i) {
-            const CtrTrophy *t=&ctr_trophies[i];
-            trophy_grade[t->id]=t->grade;
-            if (t->grade=='P') trophy_platinum=t->id;
-            trophy_names[t->id]=strdup(t->name);
-            trophy_details[t->id]=strdup(es ? t->es : t->en);
-        }
-        listed=CTR_TROPHY_COUNT;
-    }
     if (trophy_platinum<0 && !listed && trophy_total>1) trophy_platinum=0; /* the usual id when the grades are unknown */
     int before=0;
     for (int i=0;i<TROPHY_MAX;++i) before+=trophy_unlocked_at[i]!=0;

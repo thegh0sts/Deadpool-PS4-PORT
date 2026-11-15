@@ -38,14 +38,14 @@ body:
     id: what
     attributes:
       label: What happens
-      description: What you did, what you expected, what happened instead. Where in the game (menu, hub, which track, split screen).
+      description: What you did, what you expected, what happened instead. Where in the game (menu, which level, cutscene).
     validations:
       required: true
   - type: textarea
     id: game-check
     attributes:
       label: Game check
-      description: The launcher's Game row or the first lines of run.sh's output ("Game profile:" and any "Unsupported game files" message). The dump must be CUSA13795 with update 1.21 merged in.
+      description: The launcher's Game row or the first lines of run.sh's output ("Game profile:" and any "Unsupported game files" message). The dump must be Deadpool CUSA03528 version 01.00.
   - type: textarea
     id: log
     attributes:

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// CTR-NitroFueled-PC launcher (Windows). Sets up the game folder (the 1.21 update merged over
-// the base game with hard links), edits the settings the game reads (bbport.ini, the same keys
+// Deadpool-PS4-PORT launcher (Windows), from CTR-NitroFueled-PC's. Sets up the game folder (a
+// PS4 PKG Tool dump flattened with hard links), edits the settings the game reads (bbport.ini, the same keys
 // as the in-game menu) and starts run.py with the bundled Python, showing its output.
 // Dear ImGui on Win32 + Direct3D 11, linked statically: one .exe next to run.py and bin\.
 //
@@ -19,6 +19,7 @@
 #include <bcrypt.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstring>
@@ -47,19 +48,17 @@ namespace fs = std::filesystem;
 
 namespace {
 
-// The Americas build (CUSA13795) and the European one (CUSA14876, as in martijnhe's
-// OCTR-NitroFueled-PC-EU): the port runs both.
-constexpr const char* kTitleId = "CUSA13795";
-constexpr const char* kTitleIds[] = {"CUSA13795", "CUSA14876"};
-bool IsCtrTitle(const std::string& title) {
+// Deadpool, the European edition (CUSA03528 01.00): the one scripts/game_check.py accepts. The
+// North American edition (CUSA03245) is recognised so the check can say it is not supported yet.
+constexpr const char* kTitleId = "CUSA03528";
+constexpr const char* kTitleIds[] = {"CUSA03528", "CUSA03245"};
+bool IsGameTitle(const std::string& title) {
     for (const char* id : kTitleIds)
         if (title == id) return true;
     return false;
 }
-constexpr const char* kUpdateVersion = "01.21";
-constexpr const char* kRepoUrl = "https://github.com/GetLostIn/CTR-NitroFueled-PC";
-// The 1.21 update alone is about 8.5 GB; base game + update is much larger.
-constexpr std::uintmax_t kCompleteGameMinBytes = 10ull << 30;
+constexpr const char* kGameVersion = "01.00";
+constexpr const char* kRepoUrl = "https://github.com/thegh0sts/Deadpool-PS4-PORT";
 
 // ---------------------------------------------------------------------------------------------
 // Text helpers
@@ -282,7 +281,7 @@ Layout FindLayout(const fs::path& dir) {
     return {};
 }
 
-// A folder picked one level too high (the folder that holds CUSA13795) stands for its only game.
+// A folder picked one level too high (the folder that holds CUSA03528) stands for its only game.
 fs::path GameRoot(const fs::path& dir) {
     std::error_code ec;
     if (dir.empty() || FindLayout(dir)) return dir;
@@ -336,15 +335,15 @@ FolderInfo Analyze(const fs::path& dir) {
     info.title = get("TITLE_ID");
     info.version = get("APP_VER");
     info.category = get("CATEGORY");
-    if (!IsCtrTitle(info.title)) {
+    // Deadpool has no update: the dumped game (category gd, 01.00) is complete. game_check.py
+    // decides whether its executable is the supported one.
+    if (!IsGameTitle(info.title)) {
         info.kind = Kind::OtherTitle;
-    } else if (info.category == "gd") {
-        info.kind = Kind::Base;
-    } else if (info.version != kUpdateVersion) {
+    } else if (info.version != kGameVersion) {
         info.kind = Kind::OtherVersion;
     } else {
         info.bytes = FolderBytes(layout.split ? layout.files : dir);
-        info.kind = info.bytes >= kCompleteGameMinBytes ? Kind::Complete : Kind::Update;
+        info.kind = Kind::Complete;
     }
     return info;
 }
@@ -520,25 +519,14 @@ struct Choice {
     const char* value;
 };
 
-// PS4 system language codes (BB_LANGUAGE) of the languages CUSA13795 (the Americas build) has:
-// English (1, US), Latin American Spanish (20), French (2) and Brazilian Portuguese (17). Other
-// codes (Spain's Spanish 3, German, Italian...) are not in this build and fall back to English.
+// PS4 system language codes (BB_LANGUAGE) of the languages CUSA03528 (the European build) has:
+// English, French, Spanish, German and Italian. Other codes fall back to English in the game.
 constexpr Choice kGameLanguages[] = {
     {"Inglés", "English", "1"},
-    {"Español latinoamericano", "Spanish (Latin America)", "20"},
     {"Francés", "French", "2"},
-    {"Portugués (Brasil)", "Portuguese (Brazil)", "17"},
-};
-// The European build (CUSA14876): the languages of the PAL release (its store page: English,
-// French, German, Italian, Spanish and Arabic), as PS4 codes. A language the files do not hold
-// falls back to English in the game.
-constexpr Choice kGameLanguagesEu[] = {
-    {"Inglés (Reino Unido)", "English (UK)", "18"},
-    {"Español (España)", "Spanish (Spain)", "3"},
-    {"Francés", "French", "2"},
+    {"Español", "Spanish", "3"},
     {"Alemán", "German", "4"},
     {"Italiano", "Italian", "5"},
-    {"Árabe", "Arabic", "21"},
 };
 constexpr Choice kPresentModes[] = {
     {"Mailbox (recomendado)", "Mailbox (recommended)", "Mailbox"},
@@ -644,15 +632,11 @@ App g_app;
 /// saves, the shader cache, the languages and the merged folder's name follow it.
 std::string GameTitleId() {
     for (const FolderInfo* info : {&g_app.game_info, &g_app.update_info, &g_app.base_info})
-        if (IsCtrTitle(info->title)) return info->title;
+        if (IsGameTitle(info->title)) return info->title;
     return kTitleId;
 }
 std::wstring GameTitle() { return Widen(GameTitleId()); }
-bool EuEdition() { return GameTitle() == L"CUSA14876"; }
 
-std::string EffectiveRenderRes();
-std::string GameAspect();
-bool UltrawideCacheWarm();
 
 fs::path LauncherIni() { return g_app.root / L"launcher.ini"; }
 fs::path GameIni() { return g_app.root / L"bbport.ini"; }
@@ -663,7 +647,7 @@ void SaveLauncher() {
     a.launcher.Set("base_dir", PathText(a.base_dir));
     a.launcher.Set("update_dir", PathText(a.update_dir));
     a.launcher.Set("ui_language", g_spanish ? "es" : "en");
-    if (!a.launcher.Save(LauncherIni(), "# CTR-NitroFueled-PC launcher")) {
+    if (!a.launcher.Save(LauncherIni(), "# Deadpool-PS4-PORT launcher")) {
         a.notice = T("No se pudo guardar launcher.ini.", "Could not save launcher.ini.");
     }
 }
@@ -718,15 +702,15 @@ void StartCheck() {
 fs::path MergeTarget(const fs::path& near_dir) {
     App& a = g_app;
     const fs::path parent = near_dir.parent_path();
-    fs::path target = parent / (GameTitle() + L"-1.21");
+    fs::path target = parent / (GameTitle() + L"-prepared");
     if (target == near_dir || target == a.base_dir || target == a.update_dir || target == a.game_dir) {
-        target = parent / (GameTitle() + L"-1.21-merged");
+        target = parent / (GameTitle() + L"-prepared-2");
     }
     return target;
 }
 
-/// Base game + 1.21 update (or one already merged dump in the Image0 + Sc0 layout) -> a new
-/// folder of hard links in the PS4 layout (copies across drives).
+/// A dump in the Image0 + Sc0 layout (or several folders merged in order) -> a new folder of hard
+/// links in the PS4 layout (copies across drives).
 void StartMerge(std::vector<fs::path> sources) {
     App& a = g_app;
     if (sources.empty()) return;
@@ -780,25 +764,15 @@ void StartMerge(std::vector<fs::path> sources) {
     });
 }
 
-const char* DefaultGameLanguage() {
-    if (EuEdition()) return g_spanish ? "3" : "18";
-    return g_spanish ? "20" : "1";
-}
+const char* DefaultGameLanguage() { return g_spanish ? "3" : "1"; }
 
-/// The game language to start with: the saved one when the build has it, else the default (older
-/// launchers saved codes this build lacks, such as 3 for Spain's Spanish).
+/// The game language to start with: the saved one when the build has it, else the default.
 std::string GameLanguage() {
     const std::string saved = g_app.launcher.Get("language");
-    if (EuEdition()) {
-        for (const auto& c : kGameLanguagesEu)
-            if (saved == c.value) return saved;
-        if (saved == "20") return "3"; // Spanish: Spain's, the one this build has
-        if (saved == "1") return "18"; // English: the UK one
-        return DefaultGameLanguage();
-    }
     for (const auto& c : kGameLanguages)
         if (saved == c.value) return saved;
-    if (saved == "3") return "20"; // Spanish: the Latin American one this build has
+    if (saved == "20") return "3";  // Latin American Spanish: the Spanish this build has
+    if (saved == "18") return "1";  // English (UK)
     return DefaultGameLanguage();
 }
 
@@ -811,15 +785,6 @@ void StartGame() {
     if (!a.python || a.game_running) return;
     SaveGameIni();
     SaveLauncher();
-    // Friendly pre-check (run.py refuses the same way): no cold-cache ultrawide
-    // launch that could only end in an error code.
-    if (GameAspect() != "16:9" && !UltrawideCacheWarm()) {
-        a.notice = T("Primero juega una vez en 16:9 hasta el menú y ciérralo normal; "
-                     "entonces se desbloquea el ultra-panorámico.",
-                     "First play once in 16:9 up to the menu and close normally; "
-                     "ultrawide unlocks then.");
-        return;
-    }
     JoinWorker();
     {
         std::scoped_lock lock{a.mutex};
@@ -827,7 +792,7 @@ void StartGame() {
         a.last_status.clear();
     }
     SetEnv(L"BB_GAME_DIR", PathText(a.game_dir));
-    SetEnv(L"BB_NEO", EffectiveRenderRes() != "1080" ? "1" : "0");  // the resolution picks the path
+    SetEnv(L"BB_NEO", a.launcher.Flag("neo", false) ? "1" : "0");
     SetEnv(L"BB_LANGUAGE", GameLanguage());
     SetEnv(L"BB_DISPLAY", a.launcher.Get("display"));
     SetEnv(L"BB_PRESENT_MODE", a.launcher.Get("present_mode", "Mailbox"));
@@ -1017,7 +982,7 @@ void ChooseFolder(fs::path& slot, FolderInfo& info, const wchar_t* title) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Saves: <port>\user\savedata\<user>\CUSA13795\<dir> holds the game's files and <dir>.sce_sys its
+// Saves: <port>\user\savedata\<user>\<TITLE_ID>\<dir> holds the game's files and <dir>.sce_sys its
 // param.bin (title, subtitle, detail) and icon0.png, as src/runtime_savedata.c keeps them.
 
 
@@ -1151,7 +1116,7 @@ std::string RestoreBackup(const fs::path& backup) {
     return CopyTree(backup, SaveRoot());
 }
 
-/// A save folder from elsewhere: this launcher's backup or another PC's CUSA13795 folder (copied
+/// A save folder from elsewhere: this launcher's backup or another PC's CUSA03528 folder (copied
 /// as it is), or a decrypted PS4 save (Apollo Save Tool, Save Wizard: its files plus
 /// sce_sys\param.sfo), converted to the runtime's layout.
 std::string ImportSaves(const fs::path& from) {
@@ -1203,9 +1168,9 @@ std::string ImportSaves(const fs::path& from) {
         if (!IsMetaName(it->path().filename().wstring()) && fs::is_directory(meta, e2)) ours = true;
     }
     if (!ours) {
-        return T("No reconozco esa carpeta: elige una copia de seguridad, la carpeta CUSA13795 de las partidas de "
+        return T("No reconozco esa carpeta: elige una copia de seguridad, la carpeta CUSA03528 de las partidas de "
                  "otro PC o una partida de PS4 descifrada (con sce_sys\\param.sfo).",
-                 "This folder is not recognized: choose a backup, the CUSA13795 saves folder from another PC or a "
+                 "This folder is not recognized: choose a backup, the CUSA03528 saves folder from another PC or a "
                  "decrypted PS4 save (with sce_sys\\param.sfo).");
     }
     std::string error = BackupSaves("antes-de-importar");
@@ -1214,17 +1179,14 @@ std::string ImportSaves(const fs::path& from) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Patches: every eboot patch for the game's title (CUSA13795 or CUSA14876) 01.21 in patches\*.xml (shadPS4/GoldHEN XML format).
-// The three community patches keep their bbport.ini keys (shared with the in-game menu); others
-// are switched in patches.json ({"enabled": [...], "disabled": [...]}), as scripts/patches.py reads.
+// Patches: every eboot patch for the game's title (CUSA03528) 01.00 in patches\*.xml (shadPS4/GoldHEN XML format).
+// Patches with a bbport.ini key (shared with the in-game menu, scripts/patches.py GAME_PATCH_KEYS)
+// are listed in kIniPatches (none for Deadpool yet); others are switched in patches.json
+// ({"enabled": [...], "disabled": [...]}), as scripts/patches.py reads.
 
 
 
-constexpr std::pair<const char*, const char*> kIniPatches[] = {
-    {"CrashTeamRacing.xml/60 FPS Unlock", "patch_60fps"},
-    {"CrashTeamRacing.xml/Disable Motion Blur", "patch_no_motion_blur"},
-    {"CrashTeamRacing.xml/Resolution Patch (1080p for PS4 Pro)", "patch_pro_1080p"},
-};
+constexpr std::array<std::pair<const char*, const char*>, 0> kIniPatches{};
 
 std::string XmlUnescape(std::string s) {
     const std::pair<const char*, const char*> entities[] = {
@@ -1286,13 +1248,10 @@ std::vector<PatchInfo> LoadPatches() {
                 return it == attr.end() ? std::string() : it->second;
             };
             const std::string elf = get("AppElf");
-            if (get("AppVer") != kUpdateVersion || !(elf.empty() || elf == "eboot.bin")) continue;
+            if (get("AppVer") != kGameVersion || !(elf.empty() || elf == "eboot.bin")) continue;
             PatchInfo p;
             p.name = get("Name");
-            // The EU edition's bundled file shares CrashTeamRacing.xml's keys (scripts/patches.py
-            // selection_key), so the in-game menu and patches.json switch the same patches.
-            const std::string file_name = PathText(file.filename());
-            p.key = (file_name == "CrashTeamRacingEU.xml" ? std::string("CrashTeamRacing.xml") : file_name) + "/" + p.name;
+            p.key = PathText(file.filename()) + "/" + p.name;
             p.author = get("Author");
             p.note = get("Note");
             p.version = get("PatchVer");
@@ -1352,7 +1311,7 @@ void WritePatchConfig(const std::vector<std::string>& enabled, const std::vector
 // ---------------------------------------------------------------------------------------------
 // UI
 
-// v0.4 look: a dark theme with the Nitro orange as accent (ApplyTheme), Segoe UI for text,
+// v0.4 look: a dark theme with an orange accent (ApplyTheme), Segoe UI for text,
 // Bahnschrift for titles and Segoe Fluent Icons / MDL2 Assets merged in for the icons below.
 const ImVec4 kGreen{0.42f, 0.86f, 0.52f, 1.0f};
 const ImVec4 kRed{1.0f, 0.42f, 0.40f, 1.0f};
@@ -1512,7 +1471,7 @@ std::string Describe(const FolderInfo& f) {
     case Kind::NotGame:
         return T("no tiene eboot.bin y sce_sys\\param.sfo (ni Image0 y Sc0)", "no eboot.bin and sce_sys\\param.sfo (nor Image0 and Sc0)");
     case Kind::OtherTitle: return std::string(T("es otro juego o región: ", "another game or region: ")) + f.title;
-    case Kind::OtherVersion: return std::string(T("actualización ", "update ")) + f.version + T(" (se necesita la 01.21)", " (01.21 is needed)");
+    case Kind::OtherVersion: return std::string(T("versión ", "version ")) + f.version + T(" (se necesita la 01.00)", " (01.00 is needed)");
     case Kind::Base: return std::string(T("juego base ", "base game ")) + f.title + " v" + f.version;
     case Kind::Update: return std::string(T("actualización ", "update ")) + f.version + " (" + FormatBytes(f.bytes) + ")";
     case Kind::Complete: return std::string(f.title) + " v" + f.version + " (" + FormatBytes(f.bytes) + ")";
@@ -1617,76 +1576,24 @@ void PlayTab() {
         ImGui::TextColored(kGrey, "%s", PathText(a.game_dir).c_str());
         if (ImGui::Button((std::string(ICON_FOLDER "  ") + T("Cambiar carpeta del juego...", "Change game folder...")).c_str()) &&
             !busy && !a.game_running) {
-            ChooseFolder(a.game_dir, a.game_info, L"CUSA13795 + 1.21");
+            ChooseFolder(a.game_dir, a.game_info, L"CUSA03528");
         }
         ImGui::SameLine();
         if (ImGui::Button(T("Abrir carpeta", "Open folder"))) OpenInShell(a.game_dir);
     } else {
-        if (a.game_info.kind == Kind::Update) {
-            ImGui::TextColored(kRed, "%s: %s", PathText(a.game_dir).c_str(),
-                               T("solo tiene la actualización 1.21, falta el juego base",
-                                 "only has the 1.21 update, the base game is missing"));
-        } else if (a.game_info.kind == Kind::Base) {
-            ImGui::TextColored(kRed, "%s: %s", PathText(a.game_dir).c_str(),
-                               T("es el juego base sin la actualización 1.21", "is the base game without the 1.21 update"));
-        } else if (a.game_info.kind != Kind::Empty) {
+        if (a.game_info.kind != Kind::Empty) {
             ImGui::TextColored(kRed, "%s: %s", PathText(a.game_dir).c_str(), Describe(a.game_info).c_str());
         }
         ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextUnformatted(T("Necesitas tu propio dump de PS4: el juego base (CUSA13795) y la actualización 1.21 "
-                                 "(CUSA13795-patch; o la edición europea CUSA14876 con su 1.21). Si ya los tienes juntos en una carpeta, elige esa.",
-                                 "You need your own PS4 dump: the base game (CUSA13795) and the 1.21 update "
-                                 "(CUSA13795-patch; or the European edition CUSA14876 with its 1.21). If they are already merged in one folder, "
-                                 "choose that one."));
+        ImGui::TextUnformatted(T("Necesitas tu propio dump de PS4 de Deadpool: la edición europea CUSA03528, versión 01.00. "
+                                 "Elige la carpeta con eboot.bin (o la de PS4 PKG Tool, con Image0 y Sc0).",
+                                 "You need your own PS4 dump of Deadpool: the European edition CUSA03528, version 01.00. "
+                                 "Choose the folder with eboot.bin (or PS4 PKG Tool's, with Image0 and Sc0)."));
         ImGui::PopTextWrapPos();
         ImGui::Spacing();
-        if (ImGui::BeginTable("setup", 3, ImGuiTableFlags_SizingStretchProp)) {
-            ImGui::TableSetupColumn("what", ImGuiTableColumnFlags_WidthFixed);
-            ImGui::TableSetupColumn("state", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("button", ImGuiTableColumnFlags_WidthFixed);
-            auto row = [&](const char* what, fs::path& slot, FolderInfo& info, Kind good, const wchar_t* title, const char* id) {
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::TextUnformatted(what);
-                ImGui::TableNextColumn();
-                const bool ok = info.kind == good;
-                ImGui::TextColored(ok ? kGreen : (info.kind == Kind::Empty ? kGrey : kRed), "%s", Describe(info).c_str());
-                if (!slot.empty()) ImGui::TextColored(kGrey, "%s", PathText(slot).c_str());
-                ImGui::TableNextColumn();
-                ImGui::PushID(id);
-                if (ImGui::Button(T("Elegir...", "Choose...")) && !busy) ChooseFolder(slot, info, title);
-                ImGui::PopID();
-            };
-            row(T("Juego base", "Base game"), a.base_dir, a.base_info, Kind::Base, L"CUSA13795", "base");
-            row(T("Actualización 1.21", "Update 1.21"), a.update_dir, a.update_info, Kind::Update, L"CUSA13795-patch", "update");
-            ImGui::EndTable();
-        }
-        const bool can_merge = a.base_info.kind == Kind::Base && a.update_info.kind == Kind::Update;
-        if (a.job == Job::Merge) {
-            const size_t total = a.merge_total, done = a.merge_done;
-            const float fraction = total ? float(done) / float(total) : 0.0f;
-            char overlay[64];
-            std::snprintf(overlay, sizeof overlay, "%zu / %zu", done, total);
-            ImGui::ProgressBar(fraction, ImVec2(-FLT_MIN, 0), overlay);
-        } else {
-            ImGui::BeginDisabled(!can_merge || busy);
-            if (ImGui::Button(T("Preparar el juego (base + 1.21)", "Prepare the game (base + 1.21)"))) {
-                StartMerge({a.base_dir, a.update_dir});
-            }
-            ImGui::EndDisabled();
-            if (can_merge) {
-                ImGui::SameLine();
-                ImGui::TextColored(kGrey, "%s %s", T("se crea", "creates"),
-                                   PathText(MergeTarget(a.base_dir)).c_str());
-            }
-            HelpMarker(T("Une la actualización con el juego base en una carpeta nueva usando enlaces duros: no ocupa "
-                         "espacio extra ni cambia tus carpetas originales (si están en discos distintos, se copia).",
-                         "Merges the update over the base game into a new folder with hard links: no extra disk "
-                         "space and your original folders are not changed (copied if they are on different drives)."));
-        }
-        ImGui::Spacing();
-        if (ImGui::Button(T("Ya tengo el juego preparado...", "I already have the merged game...")) && !busy) {
-            ChooseFolder(a.game_dir, a.game_info, L"CUSA13795-1.21");
+        if (ImGui::Button((std::string(ICON_FOLDER "  ") + T("Elegir la carpeta del juego...", "Choose the game folder...")).c_str()) &&
+            !busy) {
+            ChooseFolder(a.game_dir, a.game_info, L"CUSA03528");
         }
     }
 
@@ -1762,29 +1669,6 @@ void PlayTab() {
     }
 }
 
-// bbport.ini render_res: the scene size (scripts/patches.py, run.py; docs/sacredfire/13-resolution.md).
-struct RenderRes {
-    const char* value;
-    const char* es;
-    const char* en;
-};
-constexpr RenderRes kRenderRes[] = {
-    {"480", "480p (854 x 480, PCs muy modestos)", "480p (854 x 480, very low-end PCs)"},
-    {"720", "720p (1280 x 720, PCs modestos)", "720p (1280 x 720, low-end PCs)"},
-    {"1080", "1080p (1920 x 1080)", "1080p (1920 x 1080)"},
-    {"1440", "1440p (2560 x 1440, PS4 Pro)", "1440p (2560 x 1440, PS4 Pro)"},
-    {"1620", "1620p (2880 x 1620)", "1620p (2880 x 1620)"},
-    {"2160", "4K (3840 x 2160)", "4K (3840 x 2160)"},
-};
-
-// The render_res in effect: the setting, or for older settings the Pro mode and 1080p patch.
-std::string EffectiveRenderRes() {
-    const std::string v = g_app.game.Get("render_res");
-    for (const auto& r : kRenderRes)
-        if (v == r.value) return v;
-    return "1080";
-}
-
 /// bbport.ini temporal (the upscaler), with the keys of v0.3 test builds before it: fsr3=1, fsr1=0.
 std::string GameTemporal() {
     const Ini& game = g_app.game;
@@ -1793,44 +1677,6 @@ std::string GameTemporal() {
         if (value == known) return value;
     if (game.Flag("fsr3", false)) return "fsr3";
     return game.Flag("fsr1", true) ? "fsr1" : "off";
-}
-
-/// v0.3 native ultrawide (by tcosi): bbport.ini aspect_ratio, Settings > Display.
-/// 16:9 off; 21:9 needs a 2560x1080/3440x1440 output; 32:9 needs 5120x1440.
-std::string GameAspect() {
-    const std::string v = g_app.game.Get("aspect_ratio", "16:9");
-    if (v == "21:9" || v == "21x9") return "21:9";
-    if (v == "32:9" || v == "32x9") return "32:9";
-    return "16:9";
-}
-
-bool IsUltrawideKey(const std::string& key) {
-    return key == "CTR-UltraWide21x9-v1.0.xml/21:9 UltraWide" ||
-           key == "CTR-SuperUltraWide32x9-v1.0.xml/32:9 Super UltraWide";
-}
-
-/// v0.3: the ultrawide options unlock only with a warm HUD shader cache
-/// (user/cache/CUSA13795 from a normal 16:9 launch to the menu), mirroring
-/// scripts/ultrawide_*_shader.py require_warm_cache. Otherwise every new player
-/// would hit the launch-time refusal on their first ultrawide try.
-bool UltrawideCacheWarm() {
-    const fs::path cache = g_app.root / L"user" / L"cache" / GameTitle();
-    std::error_code ec;
-    auto present = [&](const wchar_t* name) {
-        std::error_code e2;
-        return fs::is_regular_file(cache / name, e2) && fs::file_size(cache / name, e2) > 0;
-    };
-    if (!present(L"profile.bin") || !present(L"0x00000000d4aaf527_0.spv") ||
-        !present(L"0x0000000008948e32_0.spv")) {
-        return false;
-    }
-    bool meta = false, key = false;
-    for (fs::directory_iterator it(cache, ec), end; !ec && it != end; it.increment(ec)) {
-        const auto ext = it->path().extension();
-        if (ext == L".meta") meta = true;
-        if (ext == L".key") key = true;
-    }
-    return meta && key;
 }
 
 /// A combo over a bbport.ini key; true when the player picked another value (already set).
@@ -1856,32 +1702,6 @@ bool GameChoiceCombo(const char* label, const char* key, const Choice (&choices)
     return changed;
 }
 
-void RenderResCombo() {
-    App& a = g_app;
-    const std::string current = EffectiveRenderRes();
-    const RenderRes* selected = &kRenderRes[0];
-    for (const auto& r : kRenderRes)
-        if (current == r.value) selected = &r;
-    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 16.0f);
-    if (ImGui::BeginCombo(T("Resolución interna", "Internal resolution"), T(selected->es, selected->en))) {
-        for (const auto& r : kRenderRes) {
-            if (ImGui::Selectable(T(r.es, r.en), &r == selected)) {
-                a.game.Set("render_res", r.value);
-                SaveGameIni();
-            }
-        }
-        ImGui::EndCombo();
-    }
-    HelpMarker(T("El tamaño al que el juego dibuja la escena 3D. Por encima de 1080p usa el modo PS4 Pro del juego "
-                 "y la imagen sale en 4K: en una pantalla 1080p eso quita los dientes de sierra. "
-                 "4K necesita una GPU potente (una RTX 3070 va a unos 100 FPS); 720p y 480p alivian PCs modestos "
-                 "(la imagen sale a 1080p).",
-                 "The size the game draws its 3D scene at. Above 1080p it uses the game's PS4 Pro path (turned "
-                 "on automatically) and the picture is output at 4K: on a 1080p screen that removes jagged "
-                 "edges. 4K needs a strong GPU (an RTX 3070 runs it at about 100 FPS); 720p and 480p help low-end "
-                 "PCs (the picture is output at 1080p)."));
-}
-
 void SettingsTab() {
     App& a = g_app;
     ImGui::TextColored(kGrey, "%s", T("Se aplican al pulsar Jugar. El menú del juego (Insert o L3+R3) cambia los mismos ajustes.",
@@ -1904,10 +1724,10 @@ void SettingsTab() {
             }
             ImGui::EndCombo();
         }
-        HelpMarker(T("Con el parche de 60 FPS el juego va tan rápido como permita tu PC. En una pantalla de 144 Hz sin "
-                     "G-Sync/FreeSync, 72 reparte los fotogramas de forma pareja.",
-                     "With the 60 FPS patch the game runs as fast as your PC allows. On a 144 Hz screen without "
-                     "G-Sync/FreeSync, 72 divides the refresh evenly."));
+        HelpMarker(T("El límite de fotogramas por segundo del puerto. En una pantalla de 144 Hz sin G-Sync/FreeSync, "
+                     "72 reparte los fotogramas de forma pareja.",
+                     "The port's frames-per-second limit. On a 144 Hz screen without G-Sync/FreeSync, 72 divides "
+                     "the refresh evenly."));
     }
     GameFlag("async_pipelines", T("Compilar shaders en segundo plano (experimental)", "Compile shaders in the background (experimental)"), false,
              T("Menos tirones la primera vez que aparece un efecto; a veces un efecto tarda un fotograma en verse.",
@@ -1915,151 +1735,34 @@ void SettingsTab() {
 
     Section(T("Pantalla", "Display"));
     {
-        // v0.3 native (by tcosi): ONE dropdown sets aspect + output together, so they
-        // can never mismatch. The two ultrawide XMLs stay hidden in Patches.
-        struct AspectOutput { const char* es; const char* en; const char* aspect; const char* output; };
-        static constexpr AspectOutput kOptions[] = {
-            {"16:9 — 1280 x 720", "16:9 — 1280 x 720", "16:9", "1280x720"},
-            {"16:9 — 1920 x 1080", "16:9 — 1920 x 1080", "16:9", "1920x1080"},
-            {"16:9 — 2560 x 1440", "16:9 — 2560 x 1440", "16:9", "2560x1440"},
-            {"16:9 — 3840 x 2160 (4K)", "16:9 — 3840 x 2160 (4K)", "16:9", "3840x2160"},
-            {"21:9 UltraWide — 2560 x 1080", "21:9 UltraWide — 2560 x 1080", "21:9", "2560x1080"},
-            {"21:9 UltraWide — 3440 x 1440", "21:9 UltraWide — 3440 x 1440", "21:9", "3440x1440"},
-            {"32:9 Super UltraWide — 5120 x 1440", "32:9 Super UltraWide — 5120 x 1440", "32:9", "5120x1440"},
+        // The output size (bbport.ini output_res). 16:9 only: the ultrawide modes were made for
+        // CTR's HUD (CTR-NitroFueled-PC, by tcosi).
+        static constexpr Choice kOutputs[] = {
+            {"1280 x 720", "1280 x 720", "1280x720"},
+            {"1920 x 1080", "1920 x 1080", "1920x1080"},
+            {"2560 x 1440", "2560 x 1440", "2560x1440"},
+            {"3840 x 2160 (4K)", "3840 x 2160 (4K)", "3840x2160"},
         };
-        const std::string aspect = GameAspect();
-        const std::string output = g_app.game.Get("output_res", "1920x1080");
-        const AspectOutput* selected = &kOptions[1];
-        for (const auto& o : kOptions) {
-            if (output == o.output && aspect == o.aspect) { selected = &o; break; }
+        if (GameChoiceCombo(T("Salida", "Output"), "output_res", kOutputs, "1920x1080", 18.0f)) {
+            a.game.Erase("aspect_ratio");
+            SaveGameIni();
         }
-        if (selected->output != output) {
-            for (const auto& o : kOptions) {
-                if (output == o.output) { selected = &o; break; }
-            }
-        }
-        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 18.0f);
-        // The ultrawide rows unlock only with a warm shader cache (a normal 16:9
-        // launch to the menu first); otherwise every new player would hit the
-        // launch-time refusal. run.py keeps the same guard as a safety net.
-        const bool warm = UltrawideCacheWarm();
-        if (!warm) {
-            ImGui::TextColored(kYellow, "%s",
-                               T("El ultra-panorámico se desbloquea tras jugar una vez en 16:9 hasta el menú.",
-                                 "Ultrawide unlocks after playing once in 16:9 up to the menu."));
-        }
-        if (ImGui::BeginCombo(T("Aspecto / salida", "Aspect / output"), T(selected->es, selected->en))) {
-            for (const auto& o : kOptions) {
-                const bool locked = std::strcmp(o.aspect, "16:9") != 0 && !warm;
-                ImGui::BeginDisabled(locked);
-                if (ImGui::Selectable(T(o.es, o.en), &o == selected)) {
-                    a.game.Set("aspect_ratio", o.aspect);
-                    a.game.Set("output_res", o.output);
-                    SaveGameIni();
-                }
-                ImGui::EndDisabled();
-            }
-            ImGui::EndCombo();
-        }
-        HelpMarker(T("Una sola opción: aspecto y salida juntos, con HUD centrado en ultra-panorámico. "
-                     "Mientras hay ultra-panorámico el escalado se desactiva y la resolución interna se limita a 1440p. "
-                     "La primera vez prepara unos 9 GB de archivos; tus archivos originales no cambian. "
-                     "Antes de usarlo, una vez en 16:9: 1) JUGAR hasta el menú principal y quédate unos segundos "
-                     "(entra a Opciones y sal); 2) cierra el juego desde su menú, no lo mates ni uses Alt+F4, "
-                     "para que la caché se guarde. Si al lanzar el ultra te pide caché igualmente, entra a una "
-                     "carrera 30 segundos y sal: eso compila el segundo shader del HUD.",
-                     "One choice: aspect and output together, with centered HUD in ultrawide. "
-                     "Upscaling is off while ultrawide is on and internal resolution is capped at 1440p. "
-                     "The first run prepares about 9 GB of files; your original files are kept. "
-                     "Before using it, once in 16:9: 1) PLAY to the main menu and stay a few seconds "
-                     "(open Options and exit); 2) close the game from its menu, do not kill it nor Alt+F4, "
-                     "so the cache is saved. If launching ultrawide still asks for cache, enter a race "
-                     "for 30 seconds and exit: that compiles the second HUD shader."));
-    }
-    GameFlag("msaa", T("MSAA del juego (2x)", "Game MSAA (2x)"), false,
-             T("El antialiasing 2x de la PS4. Desactivado por defecto: en PC dibuja líneas punteadas en el "
-               "cielo y en los rayos de luz. A resoluciones altas o con FSR/DLSS casi no se nota. "
-               "Requiere reiniciar.",
-               "The PS4's 2x anti-aliasing. Off by default: on PC it draws dotted lines in the sky and "
-               "in light shafts. At high internal resolutions or with FSR/DLSS it is barely missed. "
-               "Needs a restart."));
-    const std::string temporal = GameTemporal();
-    const std::string aspect_now = GameAspect();
-    const bool uw_on = aspect_now != "16:9";
-    const bool dlss_sized = temporal == "dlss" && a.game.Get("dlss_quality", "auto") != "auto";
-    ImGui::BeginDisabled(dlss_sized);
-    RenderResCombo();
-    ImGui::EndDisabled();
-    if (dlss_sized) {
-        ImGui::SameLine();
-        ImGui::TextColored(kGrey, "%s", T("(la decide la calidad de DLSS)", "(set by the DLSS quality)"));
     }
     {
-        // temporal=off|fsr1|fsr3|dlss|fsr4 (bbport.ini): one upscaler at a time.
-        // v0.3: off while ultrawide is on (run.py forces it).
+        // temporal=off|fsr1 (bbport.ini). FSR 3, FSR 4 and DLSS (and frame generation) read CTR's
+        // G-buffer, depth and motion vectors (vk_ctr_fsr3) and are not offered until they are
+        // retargeted to Deadpool's renderer; the in-game menu lists them with BB_UPSCALER_MENU=1.
         static constexpr Choice kTemporal[] = {{"Desactivado", "Off", "off"},
-                                               {"AMD FSR 1", "AMD FSR 1", "fsr1"},
-                                               {"AMD FSR 3", "AMD FSR 3", "fsr3"},
-                                               {"AMD FSR 4 (experimental)", "AMD FSR 4 (experimental)", "fsr4"},
-                                               {"NVIDIA DLSS", "NVIDIA DLSS", "dlss"}};
-        ImGui::BeginDisabled(uw_on);
-        if (GameChoiceCombo(T("Escalado", "Upscaling"), "temporal", kTemporal, temporal.c_str(), 16.0f)) {
+                                               {"AMD FSR 1", "AMD FSR 1", "fsr1"}};
+        const std::string temporal = GameTemporal();
+        if (GameChoiceCombo(T("Escalado", "Upscaling"), "temporal", kTemporal,
+                            temporal == "off" ? "off" : "fsr1", 16.0f)) {
             a.game.Erase("fsr1");
             a.game.Erase("fsr3");
             SaveGameIni();
         }
-        ImGui::EndDisabled();
-        if (uw_on) {
-            ImGui::SameLine();
-            ImGui::TextColored(kGrey, "%s", T("(desactivado con ultra-panorámico)", "(off with ultrawide)"));
-        }
-        HelpMarker(T("FSR 1 agranda una escena más pequeña con bordes más nítidos que el estirado simple del juego. "
-                     "FSR 3, FSR 4 y DLSS reconstruyen el detalle a lo largo de varios cuadros con la profundidad y el movimiento "
-                     "del juego, y a la misma resolución también suavizan los bordes. DLSS necesita una tarjeta NVIDIA "
-                     "RTX (si no, se usa FSR 3); FSR 4 necesita soporte INT8 y sus modelos (si no, se usa FSR 3). "
-                     "FSR 4 es experimental. Si ves estelas o parpadeos, cambia a FSR 1.",
-                     "FSR 1 enlarges a smaller scene with sharper edges than the game's plain stretch. FSR 3, FSR 4 and DLSS "
-                     "rebuild detail over several frames from the game's depth and motion, and smooth edges even at the "
-                     "same resolution. DLSS needs an NVIDIA RTX card (FSR 3 runs otherwise); FSR 4 needs INT8 support "
-                     "and its model files (FSR 3 runs otherwise). FSR 4 is experimental. Switch to "
-                     "FSR 1 if you see trails or shimmering."));
-    }
-    if (temporal == "dlss") {
-        static constexpr Choice kQuality[] = {
-            {"Automática (resolución interna)", "Auto (internal resolution)", "auto"},
-            {"DLAA (nativa)", "DLAA (native)", "dlaa"},
-            {"Calidad", "Quality", "quality"},
-            {"Equilibrado", "Balanced", "balanced"},
-            {"Rendimiento", "Performance", "performance"},
-            {"Ultra rendimiento", "Ultra Performance", "ultra_performance"}};
-        if (GameChoiceCombo(T("Calidad de DLSS", "DLSS quality"), "dlss_quality", kQuality, "auto", 16.0f)) SaveGameIni();
-        HelpMarker(T("Automática usa la resolución interna de arriba. Las demás dibujan la escena a la proporción de NVIDIA "
-                     "respecto a la salida de DLSS: Calidad 67 %, Equilibrado 58 %, Rendimiento 50 %, Ultra rendimiento "
-                     "33 %, DLAA 100 %.",
-                     "Auto uses the internal resolution above. The others draw the scene at NVIDIA's share of the DLSS "
-                     "output: Quality 67%, Balanced 58%, Performance 50%, Ultra Performance 33%, DLAA 100%."));
-        if (a.game.Get("dlss_quality", "auto") != "auto") {
-            static constexpr Choice kOutput[] = {{"1920 x 1080", "1920 x 1080", "1080"},
-                                                 {"3840 x 2160 (4K)", "3840 x 2160 (4K)", "2160"}};
-            if (GameChoiceCombo(T("Salida de DLSS", "DLSS output"), "dlss_output", kOutput, "1080", 16.0f)) SaveGameIni();
-        }
-        static constexpr Choice kModel[] = {{"Transformer (recomendado)", "Transformer (recommended)", "transformer"},
-                                            {"CNN", "CNN", "cnn"}};
-        if (GameChoiceCombo(T("Modelo de DLSS", "DLSS model"), "dlss_model", kModel, "transformer", 16.0f)) SaveGameIni();
-        HelpMarker(T("Transformer: el modelo actual de NVIDIA (DLSS 4), más nítido y estable, algo más pesado. CNN: el "
-                     "modelo anterior (preset E), más ligero; NVIDIA lo marca como obsoleto.",
-                     "Transformer: NVIDIA's current model (DLSS 4), sharper and steadier, a little heavier. CNN: the "
-                     "older model (preset E), lighter; NVIDIA marks it deprecated."));
-    }
-    if (temporal == "fsr3") {
-        float sharp = float(std::atof(a.game.Get("fsr3_sharpness", "0.30").c_str()));
-        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 16.0f);
-        if (ImGui::SliderFloat(T("Nitidez de FSR 3", "FSR 3 sharpness"), &sharp, 0.0f, 1.0f, "%.2f")) {
-            char text[16];
-            std::snprintf(text, sizeof text, "%.2f", sharp);
-            a.game.Set("fsr3_sharpness", text);
-        }
-        if (ImGui::IsItemDeactivatedAfterEdit()) SaveGameIni();
+        HelpMarker(T("FSR 1 agranda la imagen del juego con bordes más nítidos que el estirado simple.",
+                     "FSR 1 enlarges the game's picture with sharper edges than a plain stretch."));
     }
     GameFlag("fullscreen", T("Pantalla completa", "Fullscreen"), false);
     GameFlag("show_fps", T("Contador de FPS en la esquina", "FPS counter in the corner"), false);
@@ -2086,59 +1789,6 @@ void SettingsTab() {
     }
     ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14.0f);
     ChoiceCombo(T("Presentación", "Presentation"), "present_mode", kPresentModes, "Mailbox");
-    {
-        // framegen=off|fsr3 (bbport.ini): AMD FSR 3 frame generation, one interpolated
-        // frame between each pair of game frames. Live in game (Insert menu) too.
-        static constexpr Choice kFramegen[] = {{"Desactivada", "Off", "off"},
-                                               {"AMD FSR 3 (experimental)", "AMD FSR 3 (experimental)", "fsr3"}};
-        std::string current = g_app.game.Get("framegen", "off");
-        if (current == "fsr" || current == "on" || current == "1") current = "fsr3"; // test builds
-        const Choice* selected = &kFramegen[0];
-        for (const auto& c : kFramegen)
-            if (current == c.value) selected = &c;
-        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14.0f);
-        if (ImGui::BeginCombo(T("Generación de cuadros", "Frame generation"), T(selected->es, selected->en))) {
-            for (const auto& c : kFramegen) {
-                if (ImGui::Selectable(T(c.es, c.en), &c == selected)) {
-                    a.game.Set("framegen", c.value);
-                    SaveGameIni();
-                }
-            }
-            ImGui::EndCombo();
-        }
-        HelpMarker(T("Muestra un cuadro interpolado entre cada par de cuadros del juego: casi el doble en pantalla. "
-                     "El juego, su límite de FPS y su ritmo no cambian. Ideal en monitores de 120 Hz o más con el juego "
-                     "a la mitad de la frecuencia (p. ej. límite 72 en 144 Hz). Funciona con cualquier escalado; FSR 3/4 "
-                     "y DLSS le dan además el movimiento del juego. Experimental: el HUD rápido puede vibrar.",
-                     "Shows an interpolated frame between each pair of game frames: about twice the frames on screen. "
-                     "The game, its FPS limit and its timing do not change. Best on 120 Hz+ screens with the game at "
-                     "half the refresh rate (e.g. a 72 limit at 144 Hz). Works with any upscaler; FSR 3/4 and DLSS "
-                     "also give it the game's motion. Experimental: fast HUD elements may shimmer."));
-        if (current != "off") {
-            static constexpr Choice kMotion[] = {
-                {"Flujo óptico (recomendado)", "Optical flow (recommended)", "flow"},
-                {"Movimiento del juego + flujo óptico", "Game motion + optical flow", "game"}};
-            const std::string motion = g_app.game.Get("framegen_motion", "flow");
-            const Choice* chosen = &kMotion[0];
-            for (const auto& c : kMotion)
-                if (motion == c.value) chosen = &c;
-            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14.0f);
-            if (ImGui::BeginCombo(T("Movimiento para generar", "Frame generation motion"),
-                                  T(chosen->es, chosen->en))) {
-                for (const auto& c : kMotion) {
-                    if (ImGui::Selectable(T(c.es, c.en), &c == chosen)) {
-                        a.game.Set("framegen_motion", c.value);
-                        SaveGameIni();
-                    }
-                }
-                ImGui::EndCombo();
-            }
-            HelpMarker(T("El flujo óptico sigue lo que se mueve en pantalla, karts incluidos. El movimiento del juego "
-                         "(con FSR 3/4 o DLSS) mueve los karts con la cámara y puede emborronarlos.",
-                         "Optical flow follows what moves on screen, karts included. The game's motion (with FSR 3/4 "
-                         "or DLSS) moves karts with the camera and can smear them."));
-        }
-    }
 
     Section(T("Mando", "Controller"));
     ImGui::TextColored(kGrey, "%s  %s", ICON_GAMEPAD,
@@ -2150,21 +1800,11 @@ void SettingsTab() {
     Section(T("Consola", "Console"));
     if (a.launcher.Get("language") != GameLanguage()) a.launcher.Set("language", GameLanguage());
     ImGui::SetNextItemWidth(ImGui::GetFontSize() * 12.0f);
-    if (EuEdition()) {
-        ChoiceCombo(T("Idioma del juego", "Game language"), "language", kGameLanguagesEu, DefaultGameLanguage());
-        HelpMarker(T("Edición europea (CUSA14876): los idiomas de la versión PAL. Si el juego no trae uno, sale en "
-                     "inglés. Se aplica al pulsar Jugar.",
-                     "European edition (CUSA14876): the PAL release's languages. A language the game lacks shows "
-                     "English. Applied when you press Play."));
-    } else {
-        ChoiceCombo(T("Idioma del juego", "Game language"), "language", kGameLanguages, DefaultGameLanguage());
-        HelpMarker(T("Los idiomas que trae esta versión del juego (CUSA13795, América): inglés, español "
-                     "latinoamericano, francés y portugués de Brasil. El español de España no está en ella. Se aplica "
-                     "al pulsar Jugar.",
-                     "The languages this build of the game has (CUSA13795, the Americas): English, Latin American "
-                     "Spanish, French and Brazilian Portuguese. Spain's Spanish is not in it. Applied when you press "
-                     "Play."));
-    }
+    ChoiceCombo(T("Idioma del juego", "Game language"), "language", kGameLanguages, DefaultGameLanguage());
+    HelpMarker(T("Los idiomas que trae la edición europea (CUSA03528): inglés, francés, español, alemán e italiano. "
+                 "Se aplica al pulsar Jugar.",
+                 "The languages the European edition (CUSA03528) has: English, French, Spanish, German and Italian. "
+                 "Applied when you press Play."));
 }
 
 void PatchesTab() {
@@ -2172,10 +1812,7 @@ void PatchesTab() {
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextColored(kGrey, "%s", T("Se aplican al iniciar el juego (o con \"Apply and restart\" del menú del juego).",
                                       "Applied when the game starts (or with the in-game menu's \"Apply and restart\")."));
-    ImGui::TextColored(kGrey, "%s", T("El ultra-panorámico 21:9/32:9 está en Ajustes > Pantalla > Aspecto / salida.",
-                                      "Ultrawide 21:9/32:9 is in Settings > Display > Aspect / output."));
     ImGui::PopTextWrapPos();
-    const bool neo = a.launcher.Flag("neo", false);
     if (a.patches.empty()) {
         ImGui::TextColored(kYellow, "%s", T("No hay parches en la carpeta patches.", "No patches in the patches folder."));
     }
@@ -2189,17 +1826,6 @@ void PatchesTab() {
             const bool listed_off = std::find(a.patch_disabled.begin(), a.patch_disabled.end(), p.key) != a.patch_disabled.end();
             on = listed_on || (p.default_on && !listed_off);
         }
-        const bool needs_neo = p.ini_key && std::strcmp(p.ini_key, "patch_pro_1080p") == 0;
-        // v0.3 native: ultrawide lives in Settings > Display > Aspect ratio (aspect_ratio),
-        // not here. Old patches.json toggles still work until an aspect is picked.
-        const bool is_ultrawide = IsUltrawideKey(p.key);
-        if (needs_neo || is_ultrawide) {  // replaced by Settings
-            ImGui::PopID();
-            continue;
-        }
-        // render_res decides the 1080p Pro patch (Settings > Internal resolution).
-        if (needs_neo) on = EffectiveRenderRes() == "1080" && neo;
-        ImGui::BeginDisabled(needs_neo);
         if (ImGui::Checkbox(p.name.c_str(), &on)) {
             if (p.ini_key) {
                 a.game.Set(p.ini_key, on ? "1" : "0");
@@ -2213,7 +1839,6 @@ void PatchesTab() {
                 WritePatchConfig(a.patch_enabled, a.patch_disabled);
             }
         }
-        ImGui::EndDisabled();
         if (!p.author.empty()) {
             ImGui::SameLine();
             ImGui::TextColored(kGrey, "%s %s%s%s", T("de", "by"), p.author.c_str(), p.version.empty() ? "" : "  v",
@@ -2221,8 +1846,6 @@ void PatchesTab() {
         }
         ImGui::Indent();
         ImGui::PushTextWrapPos(0.0f);
-        if (needs_neo) ImGui::TextColored(kGrey, "%s", T("Lo controla Ajustes > Resolución interna (1080p con el modo PS4 Pro).",
-                                                          "Controlled by Settings > Internal resolution (1080p with PS4 Pro mode)."));
         if (!p.note.empty()) ImGui::TextColored(kGrey, "%s", p.note.c_str());
         ImGui::TextColored(kGrey, "%s", p.key.c_str());
         ImGui::PopTextWrapPos();
@@ -2233,14 +1856,9 @@ void PatchesTab() {
     Section(T("Añadir parches", "Add patches"));
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextUnformatted(T("Copia archivos .xml de parches en formato shadPS4 (como los de PS-Game-Patch o GoldHEN) en la "
-                             "carpeta patches y pulsa Recargar. Solo aparecen los que son para CUSA13795 versión 01.21.",
+                             "carpeta patches y pulsa Recargar. Solo aparecen los que son para CUSA03528 versión 01.00.",
                              "Copy patch .xml files in shadPS4 format (like PS-Game-Patch's or GoldHEN's) into the patches "
-                             "folder and press Reload. Only those for CUSA13795 version 01.21 are listed."));
-    ImGui::TextColored(kGrey, "%s", T("Por ahora no existen trucos públicos para CTR Nitro-Fueled (como desbloquear todos los "
-                                      "personajes). Para tener el juego desbloqueado puedes importar una partida en la pestaña "
-                                      "Guardados.",
-                                      "There are no public cheats for CTR Nitro-Fueled yet (like unlocking every character). To "
-                                      "have the game unlocked you can import a save in the Saves tab."));
+                             "folder and press Reload. Only those for CUSA03528 version 01.00 are listed."));
     ImGui::PopTextWrapPos();
     if (ImGui::Button(T("Abrir la carpeta de parches", "Open the patches folder"))) {
         std::error_code ec;
@@ -2303,7 +1921,7 @@ void SavesTab() {
     ImGui::SameLine();
     if (ImGui::Button(T("Exportar...", "Export..."))) {
         if (const auto dest = PickFolder(a.hwnd, L"Exportar partidas / Export saves", fs::path())) {
-            const fs::path target = *dest / Widen("CTR-saves-" + Stamp());
+            const fs::path target = *dest / Widen("Deadpool-saves-" + Stamp());
             const std::string error = CopyTree(SaveRoot(), target);
             a.notice = error.empty() ? std::string(T("Partidas exportadas a ", "Saves exported to ")) + PathText(target) : error;
         }
@@ -2319,10 +1937,10 @@ void SavesTab() {
             a.saves_dirty = true;
         }
     }
-    HelpMarker(T("Acepta una copia de seguridad de este launcher, la carpeta CUSA13795 de las partidas de otro PC, o una "
+    HelpMarker(T("Acepta una copia de seguridad de este launcher, la carpeta CUSA03528 de las partidas de otro PC, o una "
                  "partida de PS4 descifrada (Apollo Save Tool, Save Wizard: una carpeta con sce_sys\\param.sfo). Antes de "
                  "importar se hace una copia de seguridad de tus partidas.",
-                 "Takes a backup made by this launcher, the CUSA13795 saves folder from another PC, or a decrypted PS4 "
+                 "Takes a backup made by this launcher, the CUSA03528 saves folder from another PC, or a decrypted PS4 "
                  "save (Apollo Save Tool, Save Wizard: a folder with sce_sys\\param.sfo). Your saves are backed up "
                  "before importing."));
     ImGui::EndDisabled();
@@ -2375,7 +1993,7 @@ void SavesTab() {
 
 // ---------------------------------------------------------------------------------------------
 // DLC (optional): the player's add-on packages in <port>\dlc, as .pkg files or extracted folders.
-// CTR Nitro-Fueled's DLC hold only the license; scripts/content_profile.py reads the same folder
+// Add-ons whose content is in the game hold only the license; scripts/content_profile.py reads the same folder
 // and the runtime reports each one installed (BB_DLC, BB_DLC_DISABLED from launcher.ini).
 
 fs::path DlcRoot() { return g_app.root / L"dlc"; }
@@ -2445,9 +2063,9 @@ DlcInfo DescribeDlc(const fs::path& path) {
     const size_t dash = content.rfind('-');
     d.label = dash == std::string::npos ? std::string() : content.substr(dash + 1);
     d.title = get("TITLE");
-    if (!IsCtrTitle(get("TITLE_ID")) || get("CATEGORY") != "ac" || d.label.size() != 16) {
-        d.problem = T("no es un DLC de CTR Nitro-Fueled (CUSA13795 / CUSA14876)",
-                      "not a CTR Nitro-Fueled (CUSA13795 / CUSA14876) DLC");
+    if (!IsGameTitle(get("TITLE_ID")) || get("CATEGORY") != "ac" || d.label.size() != 16) {
+        d.problem = T("no es un DLC de Deadpool (CUSA03528)",
+                      "not a Deadpool (CUSA03528) DLC");
         return d;
     }
     if (d.title.empty()) d.title = d.label;
@@ -2514,13 +2132,13 @@ void DlcTab() {
         a.dlc_dirty = false;
     }
     ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextUnformatted(T("Opcional: el juego funciona igual sin DLC. Los DLC de CTR Nitro-Fueled solo traen la licencia "
-                             "(el contenido ya está en el juego); el port los marca como instalados al iniciar.",
-                             "Optional: the game runs the same without DLC. CTR Nitro-Fueled's DLC only carry the license "
-                             "(the content is already in the game); the port reports them installed at start."));
-    ImGui::TextColored(kGrey, "%s", T("Usa tus propios paquetes DLC de PS4 (.pkg) de CUSA13795. Se copian a la carpeta dlc del "
+    ImGui::TextUnformatted(T("Opcional: el juego funciona igual sin DLC. El port marca como instalados los DLC que pongas "
+                             "aquí al iniciar (solo la licencia: el contenido tiene que estar en el juego).",
+                             "Optional: the game runs the same without DLC. The port reports the DLC you add here installed "
+                             "at start (the license only: their content has to be in the game)."));
+    ImGui::TextColored(kGrey, "%s", T("Usa tus propios paquetes DLC de PS4 (.pkg) de CUSA03528. Se copian a la carpeta dlc del "
                                       "port; tus archivos originales no cambian.",
-                                      "Use your own PS4 DLC packages (.pkg) for CUSA13795. They are copied into the port's "
+                                      "Use your own PS4 DLC packages (.pkg) for CUSA03528. They are copied into the port's "
                                       "dlc folder; your original files are not changed."));
     ImGui::PopTextWrapPos();
     ImGui::Spacing();
@@ -3252,9 +2870,9 @@ void ControllersPage() {
             a.launcher.Set("pad_deadzone", std::to_string(int(std::lround(inner_pct * 127.0 / 100.0))));
             SaveLauncher();
         }
-        HelpMarker(T("Cuánto hay que mover el stick antes de que el juego lo note. Súbela si el kart gira solo (stick con deriva). "
+        HelpMarker(T("Cuánto hay que mover el stick antes de que el juego lo note. Súbela si el personaje se mueve solo (stick con deriva). "
                      "Por defecto 4 %. Se ve como el anillo gris en la prueba de arriba.",
-                     "How far the stick moves before the game notices. Raise it if the kart steers by itself (stick drift). "
+                     "How far the stick moves before the game notices. Raise it if the character moves by itself (stick drift). "
                      "Default 4 %. It is the grey ring in the test above."));
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 16.0f);
         if (ImGui::SliderInt(T("Giro completo al", "Full turn at"), &outer_pct, 60, 100, "%d %%")) {
@@ -3313,9 +2931,6 @@ void ControlsTab() {
 
 ID3D11ShaderResourceView* MakeTexture(const uint32_t* bgra, int width, int height);  // after g_device
 
-// The 48 trophies' names, grades and what to do (src/ctr_trophies.h, shared with the runtime).
-#include "../../src/ctr_trophies.h"
-#define kCtrTrophies ctr_trophies
 
 
 struct Trophy {
@@ -3334,7 +2949,7 @@ struct TrophySet {
     std::vector<Trophy> list;
     ID3D11ShaderResourceView* icon = nullptr;
     bool names = false;         // names and grades known
-    bool builtin = false;       // ... from kCtrTrophies, not the game's own (encrypted) texts
+    bool builtin = false;       // ... from a built-in list, not the game's own (encrypted) texts (none for Deadpool)
     bool spanish = false;       // the launcher language its built-in texts are in
     std::string error, note;
     fs::file_time_type unlocked_time{};
@@ -3632,19 +3247,6 @@ void LoadTrophies() {
             }
         }
     }
-    if (!t.names && IsCtrTitle(t.title_id) && t.list.size() == std::size(kCtrTrophies)) {
-        for (auto& tr : t.list)
-            for (const auto& b : kCtrTrophies)
-                if (b.id == tr.id) {
-                    tr.grade = b.grade;
-                    tr.name = b.name;
-                    tr.detail = T(b.es, b.en);
-                }
-        t.title_name = "Crash Team Racing Nitro-Fueled";
-        t.names = t.builtin = true;
-        // The runtime's in-game notice reads the names and grades (and finds the platinum) here.
-        if (source != "key") WriteTrophyTsv(t);
-    }
     ReadUnlocked(t);
 }
 
@@ -3703,7 +3305,7 @@ void TrophiesTab() {
     }
     ImGui::BeginGroup();
     if (g_font_heading) ImGui::PushFont(g_font_heading, ImGui::GetStyle().FontSizeBase * 1.25f);
-    ImGui::TextUnformatted(t.title_name.empty() ? "Crash Team Racing Nitro-Fueled" : t.title_name.c_str());
+    ImGui::TextUnformatted(t.title_name.empty() ? "Deadpool" : t.title_name.c_str());
     if (g_font_heading) ImGui::PopFont();
     ImGui::Text(T("%d de %d logros  ·  %d %%", "%d of %d trophies  ·  %d %%"), unlocked, total, int(progress * 100.0f + 0.5f));
     ImGui::ProgressBar(progress, ImVec2(-FLT_MIN, 8.0f * g_ui_scale), "");
@@ -3926,14 +3528,14 @@ void ToolsTab() {
     }
 
     Section(T("Acerca de", "About"));
-    ImGui::Text("CTR-NitroFueled-PC %s", a.version.c_str());
+    ImGui::Text("Deadpool-PS4-PORT %s", a.version.c_str());
     ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextUnformatted(T("Fork de Windows de SacredFire (T3CHNOLOG1C), basado en bbport (deadinside28), el port de Windows "
-                             "de Supermedo y shadPS4. Parches de illusion y TroyWarez. Sin afiliación con Sony, Activision "
-                             "ni Beenox. Licencia GPL v2 o posterior.",
-                             "Windows fork of SacredFire (T3CHNOLOG1C), built on bbport (deadinside28), Supermedo's Windows "
-                             "port and shadPS4. Patches by illusion and TroyWarez. Not affiliated with Sony, Activision or "
-                             "Beenox. GPL v2 or later."));
+    ImGui::TextUnformatted(T("Basado en CTR-NitroFueled-PC (GetLostIn), el fork de Windows de SacredFire (T3CHNOLOG1C), "
+                             "que parte de bbport (deadinside28), el port de Windows de Supermedo y shadPS4. Sin afiliación "
+                             "con Sony, Activision ni High Moon Studios. Licencia GPL v2 o posterior.",
+                             "Based on CTR-NitroFueled-PC (GetLostIn), the Windows fork of SacredFire (T3CHNOLOG1C), built on "
+                             "bbport (deadinside28), Supermedo's Windows port and shadPS4. Not affiliated with Sony, "
+                             "Activision or High Moon Studios. GPL v2 or later."));
     ImGui::Spacing();
     ImGui::TextUnformatted(T("Escalado temporal: AMD FidelityFX FSR 3.1 (MIT) y NVIDIA DLSS. DLSS usa el SDK de "
                              "NVIDIA DLSS (nvngx_dlss.dll, redistribuido según su licencia, en licenses\\) a través del "
@@ -3943,11 +3545,11 @@ void ToolsTab() {
                              "bridge (MIT). NVIDIA, DLSS and GeForce RTX are trademarks of NVIDIA Corporation."));
     ImGui::Spacing();
     ImGui::TextUnformatted(T("FSR 3.1, la generación de cuadros FSR 3.1.6 y FSR 4 vienen de AMD FidelityFX a través de "
-                             "FireBurn/FSR-Vulkan (MIT). Ultra-panorámico de tcosi; edición europea basada en "
-                             "OCTR-NitroFueled-PC-EU de martijnhe; CPUs antiguas (MetaHeart) y dumps dañados (Naif Alqurashi).",
+                             "FireBurn/FSR-Vulkan (MIT). En CTR-NitroFueled-PC: CPUs antiguas (MetaHeart) y dumps dañados "
+                             "(Naif Alqurashi).",
                              "FSR 3.1, FSR 3.1.6 frame generation and FSR 4 come from AMD FidelityFX through "
-                             "FireBurn/FSR-Vulkan (MIT). Ultrawide by tcosi; the European edition is based on martijnhe's "
-                             "OCTR-NitroFueled-PC-EU; old CPUs (MetaHeart) and damaged dumps (Naif Alqurashi)."));
+                             "FireBurn/FSR-Vulkan (MIT). In CTR-NitroFueled-PC: old CPUs (MetaHeart) and damaged dumps "
+                             "(Naif Alqurashi)."));
     ImGui::PopTextWrapPos();
     {
         std::error_code ec;
@@ -3974,13 +3576,13 @@ void ClearShaderCache() {
 // ---------------------------------------------------------------------------------------------
 // v0.4 header: the icon, the title, the version and the edition of the chosen game.
 
-/// "América (USA) · CUSA13795", "Europa (PAL) · CUSA14876" or "" without a game.
+/// "Europa (PAL) · CUSA03528", "América (USA) · CUSA03245" or "" without a game.
 std::string EditionLabel() {
     const std::string title = GameTitleId();
     bool known = false;
-    for (const FolderInfo* info : {&g_app.game_info, &g_app.update_info, &g_app.base_info}) known |= IsCtrTitle(info->title);
+    for (const FolderInfo* info : {&g_app.game_info, &g_app.update_info, &g_app.base_info}) known |= IsGameTitle(info->title);
     if (!known) return {};
-    return std::string(title == "CUSA14876" ? T("Europa (PAL)", "Europe (PAL)") : T("América (USA)", "Americas (USA)")) +
+    return std::string(title == "CUSA03245" ? T("América (USA)", "Americas (USA)") : T("Europa (PAL)", "Europe (PAL)")) +
            " · " + title;
 }
 
@@ -4005,7 +3607,7 @@ void Header() {
     }
     ImFont* title_font = g_font_title ? g_font_title : ImGui::GetFont();
     const float title_size = 30.0f * s;
-    dl->AddText(title_font, title_size, ImVec2(x, win.y + 10.0f * s), IM_COL32(0xFF, 0xFF, 0xFF, 0xFF), "CTR Nitro-Fueled PC");
+    dl->AddText(title_font, title_size, ImVec2(x, win.y + 10.0f * s), IM_COL32(0xFF, 0xFF, 0xFF, 0xFF), "Deadpool PS4 Port");
     std::string version = a.version;
     if (const auto dash = version.find("-windows"); dash != std::string::npos) version.erase(dash);
     const std::string subtitle =
@@ -4041,44 +3643,21 @@ void Header() {
 
 void PlaySummary() {
     App& a = g_app;
-    auto res = [&]() -> std::string {
-        const std::string v = EffectiveRenderRes();
-        for (const auto& r : kRenderRes)
-            if (v == r.value) return T(r.es, r.en);
-        return v;
-    };
     auto upscaler = [&]() -> std::string {
         const std::string t = GameTemporal();
-        if (t == "fsr1") return "AMD FSR 1";
-        if (t == "fsr3") return "AMD FSR 3";
-        if (t == "fsr4") return T("AMD FSR 4 (experimental)", "AMD FSR 4 (experimental)");
-        if (t == "dlss") return "NVIDIA DLSS";
-        return T("Desactivado", "Off");
+        return t == "off" ? T("Desactivado", "Off") : "AMD FSR 1";
     };
     auto language = [&]() -> std::string {
         const std::string v = GameLanguage();
-        if (EuEdition()) {
-            for (const auto& c : kGameLanguagesEu)
-                if (v == c.value) return T(c.es, c.en);
-        } else {
-            for (const auto& c : kGameLanguages)
-                if (v == c.value) return T(c.es, c.en);
-        }
+        for (const auto& c : kGameLanguages)
+            if (v == c.value) return T(c.es, c.en);
         return v;
     };
     const int fps = a.game.Int("fps_limit", 60);
-    const std::string framegen = a.game.Get("framegen", "off");
-    const std::string aspect = GameAspect();
-    const std::string output = a.game.Get("output_res");
+    const std::string output = a.game.Get("output_res", "1920x1080");
     const std::pair<std::string, std::string> rows[] = {
-        {T("Resolución interna", "Internal resolution"),
-         GameAspect() != "16:9" && std::atoi(EffectiveRenderRes().c_str()) > 1440
-             ? std::string(T("1440p (el máximo con ultra-panorámico)", "1440p (the most with ultrawide)"))
-             : res()},
-        {T("Escalado", "Upscaling"), GameAspect() != "16:9" ? T("(apagado con ultra-panorámico)", "(off with ultrawide)") : upscaler()},
-        {T("Generación de cuadros", "Frame generation"),
-         framegen == "fsr3" || framegen == "fsr" ? "AMD FSR 3" : T("Desactivada", "Off")},
-        {T("Aspecto / salida", "Aspect / output"), aspect + (output.empty() ? "" : "  ·  " + output)},
+        {T("Escalado", "Upscaling"), upscaler()},
+        {T("Salida", "Output"), output},
         {T("Límite de FPS", "FPS limit"), fps == 0 ? T("Sin límite", "No limit") : std::to_string(fps) + " FPS"},
         {T("Idioma del juego", "Game language"), language()},
     };
@@ -4243,63 +3822,17 @@ void LoadState() {
     a.update_dir = TextPath(a.launcher.Get("update_dir"));
     // First start of a portable package: a merged folder next to the launcher is picked up.
     if (a.game_dir.empty()) {
-        for (const wchar_t* name : {L"CUSA13795-1.21", L"CUSA14876-1.21", L"CUSA13795", L"CUSA14876"}) {
+        for (const wchar_t* name : {L"CUSA03528", L"CUSA03528-prepared"}) {
             if (Analyze(a.root / name).kind == Kind::Complete) {
                 a.game_dir = a.root / name;
                 break;
             }
-        }
-        for (const wchar_t* title : {L"CUSA13795", L"CUSA14876"}) {
-            const std::wstring base = title, update = base + L"-patch";
-            if (a.base_dir.empty() && Analyze(a.root / base).kind == Kind::Base) a.base_dir = a.root / base;
-            if (a.update_dir.empty() && Analyze(a.root / update).kind == Kind::Update) a.update_dir = a.root / update;
         }
     }
     a.base_info = Analyze(a.base_dir);
     a.update_info = Analyze(a.update_dir);
     a.patches = LoadPatches();
     ReadPatchConfig(a.patch_enabled, a.patch_disabled);
-    // v0.3 one-time migration: ultrawide moves from the Patches tab (patches.json)
-    // to Settings > Display > Aspect ratio (bbport.ini aspect_ratio, single dropdown).
-    // If the game settings have no aspect key yet but a Patches toggle enabled an
-    // ultrawide XML, adopt it as the aspect and drop both XMLs from patches.json so
-    // Patches (which hides them now) can never re-enable them behind the dropdown.
-    if (a.game.Get("aspect_ratio").empty()) {
-        const char* adopted = nullptr;
-        bool both = false;
-        for (const auto& key : a.patch_enabled) {
-            const char* mine = nullptr;
-            if (key == "CTR-UltraWide21x9-v1.0.xml/21:9 UltraWide") mine = "21:9";
-            if (key == "CTR-SuperUltraWide32x9-v1.0.xml/32:9 Super UltraWide") mine = "32:9";
-            if (mine) {
-                if (adopted) both = true;
-                adopted = mine;
-            }
-        }
-        if (both) adopted = nullptr;  // both on: leave off, the player picks one
-        auto drop_uw = [&](std::vector<std::string>& v) {
-            v.erase(std::remove_if(v.begin(), v.end(), [](const std::string& k) { return IsUltrawideKey(k); }), v.end());
-        };
-        if (adopted) {
-            a.game.Set("aspect_ratio", adopted);
-            SaveGameIni();
-            drop_uw(a.patch_enabled);
-            drop_uw(a.patch_disabled);
-            WritePatchConfig(a.patch_enabled, a.patch_disabled);
-            a.notice = T("Ultra-panorámico movido a Ajustes > Pantalla > Aspecto / salida.",
-                         "Ultrawide moved to Settings > Display > Aspect / output.");
-        } else {
-            // No single legacy toggle: just hide any stale entries from the JSON.
-            bool had = false;
-            for (const auto& k : a.patch_enabled) had = had || IsUltrawideKey(k);
-            for (const auto& k : a.patch_disabled) had = had || IsUltrawideKey(k);
-            if (had) {
-                drop_uw(a.patch_enabled);
-                drop_uw(a.patch_disabled);
-                WritePatchConfig(a.patch_enabled, a.patch_disabled);
-            }
-        }
-    }
     StartCheck();
     StartProbe();
 }
@@ -4552,7 +4085,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     ImGui_ImplWin32_EnableDpiAwareness();
     const float scale = ImGui_ImplWin32_GetDpiScaleForMonitor(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY));
 
-    WNDCLASSEXW wc{sizeof wc, CS_CLASSDC, WndProc, 0, 0, instance, nullptr, nullptr, nullptr, nullptr, L"CtrNitroFueledPcLauncher", nullptr};
+    WNDCLASSEXW wc{sizeof wc, CS_CLASSDC, WndProc, 0, 0, instance, nullptr, nullptr, nullptr, nullptr, L"DeadpoolPs4PortLauncher", nullptr};
     wc.hIcon = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXICON),
                                               GetSystemMetrics(SM_CYICON), LR_DEFAULTCOLOR));
     wc.hIconSm = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
@@ -4564,12 +4097,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
     const int x = work.left + std::max(0, int(work.right - work.left - width) / 2);
     const int y = work.top + std::max(0, int(work.bottom - work.top - height) / 2);
-    HWND hwnd = CreateWindowW(wc.lpszClassName, L"CTR Nitro-Fueled PC", WS_OVERLAPPEDWINDOW, x, y, width, height, nullptr,
+    HWND hwnd = CreateWindowW(wc.lpszClassName, L"Deadpool PS4 Port", WS_OVERLAPPEDWINDOW, x, y, width, height, nullptr,
                               nullptr, instance, nullptr);
     g_app.hwnd = hwnd;
     if (!CreateDevice(hwnd)) {
         CleanupDevice();
-        MessageBoxW(nullptr, L"Direct3D 11 is not available.", L"CTR Nitro-Fueled PC", MB_ICONERROR);
+        MessageBoxW(nullptr, L"Direct3D 11 is not available.", L"Deadpool PS4 Port", MB_ICONERROR);
         return 1;
     }
     ShowWindow(hwnd, SW_SHOWDEFAULT);

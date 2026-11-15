@@ -45,15 +45,17 @@ if [[ -z ${PYTHON:-} ]]; then
     fi
 fi
 if [[ -z ${PYTHON:-} ]]; then echo 'Install Python 3 or set PYTHON.' >&2; exit 1; fi
-# BB_GAME_DIR: the game's folder (eboot.bin, sce_module, ...); default: orig/CUSA13795, SacredFire's
-# read-only link tree of the merged CTR dump (update 1.21 over the base game).
-game=${BB_GAME_DIR:-orig/CUSA13795}
+# BB_GAME_DIR: the game's folder (eboot.bin, sce_module, ...); default: orig/CUSA03528, the
+# dumped Deadpool EU 01.00 (or a link to it).
+game=${BB_GAME_DIR:-orig/CUSA03528}
 if [[ ! -f $game/eboot.bin ]]; then echo "No eboot.bin in $game (set BB_GAME_DIR)." >&2; exit 1; fi
 # The game check (scripts/game_check.py) compares the executable image with the supported one
-# (Crash Team Racing Nitro-Fueled CUSA13795 1.21) and names the profile the runtime reads.
+# (Deadpool EU CUSA03528 01.00) and names the profile the runtime reads.
 profile=$("$PYTHON" scripts/game_check.py "$game") || { echo "$profile" >&2; exit 2; }
 export BB_GAME_PROFILE=${profile:-deadpool}
 echo "Game profile: $BB_GAME_PROFILE"
+read -r title_id app_version <<< "$("$PYTHON" scripts/game_check.py --info "$game")"
+read -r -a modules <<< "$("$PYTHON" scripts/game_check.py --modules "$game")"
 original_game=$game
 game=$("$PYTHON" scripts/mods.py "$game" --out "$out" \
     --mods-dir "${BB_MODS_DIR:-$data/mods}" --config "${BB_MODS_CONFIG:-$data/mods.json}" \
@@ -65,37 +67,27 @@ if [[ $game != "$(realpath "$original_game")" ]]; then
 fi
 "$PYTHON" scripts/prepare.py "$game" --out "$out"
 "$PYTHON" scripts/link_libc.py "$game" --out "$out"
-"$PYTHON" scripts/link_modules.py "$game" --out "$out" --modules libc.prx libSceFios2.prx libSceNpToolkit2.prx
+"$PYTHON" scripts/link_modules.py "$game" --out "$out" --modules "${modules[@]}"
 # SacredFire: symbol names for this eboot's host-side imports (shadPS4's aerolib list, fetched once).
 "$PYTHON" tools/gen_import_names.py --out "$out"
 "$PYTHON" scripts/content_profile.py "$game" --out "$out" --sku "${BB_CONTENT_SKU:-full}"
-# The game runs at its own 30 FPS against a 60 Hz vblank unless the 60 FPS patch is on. Patches
-# come from patches/CrashTeamRacing.xml (community patches by illusion and TroyWarez, from
-# https://github.com/illusionyy/PS-Game-Patch), chosen in the in-game menu (bbport.ini patch_*
-# keys) or patches.json; BB_PATCHES_DIR adds a folder of further shadPS4-format XML files.
+# Patches: shadPS4-format XML files in patches/ (none bundled for Deadpool yet), chosen in the
+# in-game menu (bbport.ini patch_* keys) or patches.json; BB_PATCHES_DIR adds another folder.
 fps=${BB_FPS:-30}
 "$PYTHON" scripts/patches.py --patches-dir "${BB_PATCHES_DIR:-patches}" --patches-config "${BB_PATCHES_CONFIG:-$data/patches.json}" \
-    --app-version 01.21 --title-id CUSA13795 --out "$out" --settings "$BB_CONFIG"
+    --app-version "$app_version" --title-id "$title_id" --out "$out" --settings "$BB_CONFIG"
 patch_args=(--patches "$out/patches.bin")
 # BB_NEO=1: PS4 Pro mode (sceKernelIsNeoMode, 7-CPU mode, 5568 MiB direct memory); the game then
 # picks its Pro rendering path. Off by default: the Steam Deck is closer to a base PS4.
 export BB_NEO=${BB_NEO:-0}
 echo "PS4 Pro mode: ${BB_NEO} (BB_NEO=1 turns it on)"
-# The on-disk shader/pipeline cache (user/cache/CUSA13795) is kept across launches: the GPU
+# The on-disk shader/pipeline cache (user/cache/<TITLE_ID>) is kept across launches: the GPU
 # library preloads every pipeline from earlier sessions at start, so areas seen before no longer
-# compile shaders mid-race. BB_CLEAR_SHADER_CACHE=1 (launcher: "Clear the shader cache at start")
-# deletes it first; the fur breakage that once forced a clear per launch is fixed
-# (docs/sacredfire/06-fur.md: geometry specialization and preload fetch shader).
+# compile shaders mid-game. BB_CLEAR_SHADER_CACHE=1 (launcher: "Clear the shader cache at start")
+# deletes it first.
 if [[ ${BB_CLEAR_SHADER_CACHE:-0} == 1 ]]; then
-    rm -rf "${BB_USER_DIR:-$data/user}/cache/CUSA13795"
+    rm -rf "${BB_USER_DIR:-$data/user}/cache/$title_id"
     echo "Shader cache: cleared for this launch (BB_CLEAR_SHADER_CACHE=1)"
-fi
-# With the 60 FPS patch the game's own limiter paces frames; a 60 Hz virtual vblank would
-# quantize a slightly late frame to 30 FPS (measured: 40-44 FPS alternating 16.7/33 ms).
-# A 480 Hz vblank lets frames flip as they come (menus 60 FPS instead of 50).
-if [[ -f $BB_CONFIG ]] && grep -qx 'patch_60fps=1' "$BB_CONFIG"; then
-    export BB_VBLANK_HZ=${BB_VBLANK_HZ:-480}
-    echo "60 FPS patch on: virtual vblank ${BB_VBLANK_HZ} Hz"
 fi
 # Background upload of the game's GPU memory into VRAM ahead of use (BufferCache::Preupload):
 # 1 = only memory already in VRAM that the game rewrote (no new VRAM), 2 = all of it (~3 GB more

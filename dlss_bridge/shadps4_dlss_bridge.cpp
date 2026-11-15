@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //
 // shadps4_dlss.dll: the only part of the project that uses the NVIDIA DLSS (NGX) SDK.
-// SacredFire (CTR-NitroFueled-PC): from IFreemz/shadPS4-Bloodborne-DLSS-FSR's dlss_bridge,
+// SacredFire (CTR-NitroFueled-PC, now Deadpool-PS4-PORT): from IFreemz/shadPS4-Bloodborne-DLSS-FSR's dlss_bridge,
 // built as sacredfire_dlss.dll with this project's own NGX project id and engine name.
 
 #include <algorithm>
@@ -19,7 +19,7 @@
 namespace {
 
 constexpr char ProjectId[] = "99380a42-de3d-4dac-85c1-d6657e4c4862";
-constexpr char EngineVersion[] = "CTR-NitroFueled-PC";
+constexpr char EngineVersion[] = "Deadpool-PS4-PORT";
 
 struct State {
     ShadDlssLogFn log{};

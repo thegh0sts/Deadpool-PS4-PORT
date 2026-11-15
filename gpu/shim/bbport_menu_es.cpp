@@ -10,7 +10,7 @@ namespace BbSettings {
 
 const char* Spanish(const char* english) {
     static const std::unordered_map<std::string_view, const char*> table = {
-    {"CTR Nitro-Fueled PC  ·  Insert / L3+R3###bbport_settings", "CTR Nitro-Fueled PC  ·  Insert / L3+R3###bbport_settings"},
+    {"Deadpool PS4 Port  ·  Insert / L3+R3###bbport_settings", "Deadpool PS4 Port  ·  Insert / L3+R3###bbport_settings"},
     {"%.0f FPS  (%.1f ms)", "%.0f FPS  (%.1f ms)"},
     {"Off", "Desactivado"},
     {"Output resolution", "Pantalla"},
@@ -32,14 +32,14 @@ const char* Spanish(const char* english) {
     {"Frame generation", "Generación de cuadros"},
     {"Shows an interpolated frame between each pair of game frames: about twice the frames on screen (the game itself, its FPS limit and its timing do not change). Best on 120 Hz+ screens with the game at about half the refresh rate. Works with any upscaler; FSR 3/4 and DLSS also give it the game's motion. Fast HUD elements may shimmer. Applies at once.", "Muestra un cuadro interpolado entre cada par de cuadros del juego: casi el doble de imágenes en pantalla (el juego, su límite de FPS y su ritmo no cambian). Ideal en pantallas de 120 Hz o más con el juego a la mitad. Funciona con cualquier escalado. Se aplica al momento."},
     {"Frame generation motion", "Movimiento para generar"},
-    {"Optical flow follows what moves on screen, karts included. The game's motion needs FSR 3/4 or DLSS and moves karts with the camera, which can smear them.", "El flujo óptico sigue lo que se mueve en pantalla, karts incluidos. El movimiento del juego necesita FSR 3/4 o DLSS y mueve los karts con la cámara, lo que puede emborronarlos."},
+    {"Optical flow follows what moves on screen. The game's motion needs FSR 3/4 or DLSS and can smear objects that move with the camera.", "El flujo óptico sigue lo que se mueve en pantalla. El movimiento del juego necesita FSR 3/4 o DLSS y puede emborronar los objetos que se mueven con la cámara."},
     {"DLSS quality", "Calidad DLSS"},
     {"Auto keeps the internal resolution above. The others render at NVIDIA's share of the DLSS output: Quality 67%, Balanced 58%, Performance 50%, Ultra Performance 33%, DLAA 100%. Applies after the restart.", "Automático mantiene la resolución interna de arriba. Las demás dibujan a la proporción de NVIDIA de la salida DLSS: Calidad 67 %, Equilibrado 58 %, Rendimiento 50 %, Ultra rendimiento 33 %, DLAA 100 %. Tras reiniciar."},
     {"DLSS output", "Salida DLSS"},
     {"DLSS model", "Modelo DLSS"},
     {"Transformer: NVIDIA's current model (DLSS 4), sharper and steadier, a little heavier. CNN: the older model (preset E), lighter; NVIDIA marks it deprecated. Applies at once.", "Transformer: el modelo actual de NVIDIA (DLSS 4), más nítido y estable, algo más pesado. CNN: el anterior, más ligero. Se aplica al momento."},
     {"FSR 3 sharpness", "Nitidez FSR 3"},
-    {"From patches/CrashTeamRacing.xml (illusionyy/PS-Game-Patch), applied to the executable at start.", "De patches/CrashTeamRacing.xml (illusionyy/PS-Game-Patch); se aplican al arrancar."},
+    {"From patches/*.xml, applied to the executable at start.", "De patches/*.xml; se aplican al arrancar."},
     {"Changes apply after restarting the game", "Los cambios se aplican al reiniciar el juego"},
     {"Apply and restart game", "Aplicar y reiniciar el juego"},
     {"Controllers (split screen)", "Mandos (pantalla dividida)"},

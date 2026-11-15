@@ -41,7 +41,6 @@ gpu/shim/bbport_gnm_table.inc
 /dlc/
 /backups/
 /launcher.ini
-/CUSA13795*/
 *.pkg
 
 # Deadpool: the game dumps (your own) and anything derived from them, never committed

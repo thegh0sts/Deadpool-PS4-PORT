@@ -136,10 +136,15 @@ def explain(kind, title, version):
 if __name__ == '__main__':
     # game_check.py GAME_DIR: prints the profile name (run.sh branches on it), or fails with the reason.
     # game_check.py --info GAME_DIR: prints "TITLE_ID APP_VER" (run.py passes them to patches.py).
+    # game_check.py --modules GAME_DIR: the sce_module PRXs to link natively (link_modules.py).
     args = sys.argv[1:]
     if args[:1] == ['--info']:
         info = sfo_info(Path(args[1]) if len(args) > 1 else Path('.'))
         print(info.get('TITLE_ID', SUPPORTED_TITLE), info.get('APP_VER', SUPPORTED_VERSION))
+        sys.exit()
+    if args[:1] == ['--modules']:
+        found = profile(Path(args[1]) if len(args) > 1 else Path('.')) or SUPPORTED[SUPPORTED_IMAGE]
+        print(' '.join(found['modules']))
         sys.exit()
     game = Path(args[0]) if args else Path('.')
     found = problem(game)

@@ -4,7 +4,8 @@ SacredFire builds and runs natively on 64-bit Windows 10 (1903+) and 11 with the
 toolchain, from the same sources as the Linux build. The Windows layer (loader, memory, TLS,
 exceptions, files, timers) comes from Supermedo's Windows port of bbport
 ([Supermedo/bloodborne_pc](https://github.com/Supermedo/bloodborne_pc), branch `windows`),
-merged into SacredFire. Tested on Windows 11 24H2 with an NVIDIA RTX 3070.
+merged into SacredFire (CTR-NitroFueled-PC, which this port comes from, was tested on Windows 11 24H2
+with an NVIDIA RTX 3070).
 
 ## Build
 
@@ -29,40 +30,33 @@ bash build.sh                      # out/sacredfire.exe, out/bb-gpu-capabilities
 
 ## Game files
 
-As on Linux: your own dump of CUSA13795 with the 1.21 update merged in. With the base game and
-the update dumped to two folders, `tools/merge_update.py` makes the merged folder out of hard
-links (no copy, the dumps stay untouched; same drive):
-
-```bash
-python tools/merge_update.py <path>/CUSA13795 <path>/CUSA13795-patch <path>/CUSA13795-1.21
-```
+Your own dump of Deadpool, the European edition CUSA03528 version 01.00 (decrypted; the PS4 PKG
+Tool layout, Image0 + Sc0, is flattened by the launcher with hard links). There is no update to
+merge. `scripts/game_check.py` names what is accepted.
 
 ## Launcher
 
-`CTR-NitroFueled-PC.exe` (`launcher/windows/launcher.cpp`, target `ctr-launcher`; Dear ImGui on
+`Deadpool-PS4-PORT.exe` (`launcher/windows/launcher.cpp`, target `port-launcher`; Dear ImGui on
 Win32 + Direct3D 11, linked statically, no DLLs) is what players open:
 
-- **Play**: base game and 1.21 update folders (told apart by `param.sfo`), merged with hard links
-  into `CUSA13795-1.21`, checked with `scripts/game_check.py`; starts `run.py` with the bundled
-  Python in a job object and shows its output.
-- **Settings**: FPS limit, background shader compiles, fullscreen, FPS counter, internal
-  resolution, upscaling, aspect/output in one dropdown (16:9 outputs, 21:9 UltraWide,
-  32:9 Super UltraWide; `bbport.ini`, the in-game menu's keys); monitor, present mode,
-  controller, game language
-  (`launcher.ini`, passed as `BB_*` variables, plus `bbport.ini` language).
-  Aspect/output (v0.4, by tcosi) replaces the Patches-tab toggles; upscaling is off
-  while ultrawide is on.
-- **Patches**: every patch for CUSA13795 01.21 in `patches\*.xml`; the three community patches
-  keep their `bbport.ini` keys, others go through `patches.json`. The two ultrawide XMLs
-  (21:9, 32:9) are hidden here: they are driven by Settings > Display > Aspect ratio
-  (`aspect_ratio` in `bbport.ini`; old `patches.json` toggles still apply as fallback).
+- **Play**: the game folder (checked with `scripts/game_check.py`; a PS4 PKG Tool dump is first
+  flattened into `CUSA03528-prepared` with hard links); starts `run.py` with the bundled Python in
+  a job object and shows its output.
+- **Settings**: FPS limit, background shader compiles, fullscreen, FPS counter, output size,
+  upscaling (off or AMD FSR 1; `bbport.ini`, the in-game menu's keys); monitor, present mode,
+  controller, game language (`launcher.ini`, passed as `BB_*` variables, plus `bbport.ini`
+  language). The CTR-tuned temporal upscalers, frame generation, internal resolution and
+  ultrawide modes are not offered (see HANDOFF.md).
+- **Patches**: every patch for CUSA03528 01.00 in `patches\*.xml`, switched through
+  `patches.json` (none bundled yet).
 - **Saves**: backups to `backups\`, restore, export, import of another PC's saves or a decrypted
   PS4 save (`sce_sys\param.sfo`, converted to the runtime's `<dir>` + `<dir>.sce_sys\param.bin`).
 - **DLC** (optional): the player's own add-on packages (`.pkg`) copied into `dlc\`.
   `scripts/content_profile.py` reads their entitlement labels (package header and `param.sfo`,
-  nothing is extracted: CTR Nitro-Fueled's DLC only carry the license) into `content.bin`
-  (`BBCONT02`), and the runtime reports them installed from `sceAppContentGetAddcontInfoList`.
-  `BB_DLC=0` / `BB_DLC_DISABLED=label,...` turn them off.
+  nothing is extracted) into `content.bin` (`BBCONT02`), and the runtime reports them installed
+  from `sceAppContentGetAddcontInfoList`. `BB_DLC=0` / `BB_DLC_DISABLED=label,...` turn them off.
+- **Achievements**: the game's trophies from `sce_sys/trophy/trophy00.trp`; names need the
+  player's own trophy key.
 
 A test build with `-DLAUNCHER_SELFTEST` runs the file operations from the command line
 (`--import`, `--restore`, `--patches`, `--dlc`).
@@ -72,7 +66,7 @@ A test build with `-DLAUNCHER_SELFTEST` runs the file operations from the comman
 `run.py` is the Windows `run.sh` (same variables; MSYS2's Python or a python.org Python):
 
 ```bat
-set BB_GAME_DIR=C:\Games\CUSA13795-1.21
+set BB_GAME_DIR=C:\Games\CUSA03528
 C:\msys64\clang64\bin\python.exe run.py
 ```
 
@@ -98,7 +92,7 @@ moves them).
 | SIGSEGV handler, `sigsetjmp` recovery | Vectored exception handler; `bb_setjmp`/`bb_longjmp` (`src/compat_win.c`). |
 | glibc sleeps, `CLOCK_MONOTONIC` condition variables | High-resolution waitable timers; semaphore and event flag deadlines on `CLOCK_REALTIME` (winpthreads rejects monotonic condition variables). |
 | `libbbgpu.so` | A static `libbbgpu.a` linked into `sacredfire.exe`, with a manifest for UTF-8 and long paths. |
-| `run.sh`, GTK launcher | `run.py` and the Windows launcher (`CTR-NitroFueled-PC.exe`, above). |
+| `run.sh`, GTK launcher | `run.py` and the Windows launcher (`Deadpool-PS4-PORT.exe`, above). |
 | Save files replaced with `rename` | `MoveFileEx(MOVEFILE_REPLACE_EXISTING)`; all files opened in binary mode. |
 
 Not available on Windows: the PC memory model (`BB_PC_MODEL`/`BB_GUEST_IN_PLACE`, dma-buf guest

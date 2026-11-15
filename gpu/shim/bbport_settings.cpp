@@ -264,7 +264,7 @@ void Load() {
 
 bool RenderSizeNeedsRestart() {
     const auto& v = Get();
-    // As scripts/patches.py render_plan: a DLSS quality mode decides, else render_res.
+    // As CTR-NitroFueled-PC's scripts/patches.py render_plan did: a DLSS quality mode decides, else render_res.
     // v0.3: the ultrawide aspect also needs a restart (archives + executable).
     const auto key = [](int temporal, int quality, int output, int render_res) {
         return temporal == TemporalDlss && quality > 0 ? 100 + quality * 2 + output : render_res;

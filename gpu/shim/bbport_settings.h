@@ -42,18 +42,16 @@ inline constexpr Effect Effects[] = {
     {"debug_menu", "Debug menu (requires font files)", "Debug menu (нужны файлы шрифтов)", false},
 };
 inline constexpr int EffectCount = int(sizeof(Effects) / sizeof(Effects[0]));
-/// SacredFire: game patches (patches/CrashTeamRacing.xml), selected by these bbport.ini keys and
-/// compiled into the executable at start by scripts/patches.py; a restart applies a change.
-/// The patches are community work from illusionyy/PS-Game-Patch
-/// (https://github.com/illusionyy/PS-Game-Patch, patches/xml/CrashTeamRacingUS-Orbis.xml):
-/// "60 FPS Unlock" and "Disable Motion Blur" by illusion, "Resolution Patch (1080p for PS4 Pro)"
-/// by TroyWarez. SacredFire only corrected the last one's address (docs/sacredfire/08-patches.md).
-inline constexpr Effect GamePatches[] = {
-    {"patch_60fps", "60 FPS unlock (illusion)", "60 FPS (illusion)", false},
-    {"patch_no_motion_blur", "Disable motion blur (illusion)", "Без размытия в движении (illusion)", false},
-    {"patch_pro_1080p", "1080p in PS4 Pro mode (TroyWarez; with BB_NEO=1)", "1080p в режиме PS4 Pro (TroyWarez; с BB_NEO=1)", false},
+/// SacredFire: game patches (patches/*.xml), selected by these bbport.ini keys and compiled into
+/// the executable at start by scripts/patches.py (GAME_PATCH_KEYS); a restart applies a change.
+/// None for Deadpool yet: add entries to GamePatchList and set GamePatchCount to match. The list
+/// keeps one unused slot so that no array has size zero.
+inline constexpr Effect GamePatchList[] = {
+    {"", "", "", false},
 };
-inline constexpr int GamePatchCount = int(sizeof(GamePatches) / sizeof(GamePatches[0]));
+inline constexpr int GamePatchCount = 0;
+inline constexpr const Effect* GamePatches = GamePatchList;
+inline constexpr int GamePatchSlots = GamePatchCount > 0 ? GamePatchCount : 1;
 /// SacredFire: bbport.ini render_res, the scene size CTR renders (through its PS4 Pro path above
 /// 1080p; scripts/patches.py and run.py apply it at start, docs/sacredfire/13-resolution.md).
 inline constexpr int RenderResHeights[] = {480, 720, 1080, 1440, 1620, 2160};
@@ -80,7 +78,7 @@ inline constexpr const char* TemporalNames[TemporalCount] = {"off", "fsr1", "fsr
 enum FrameGen : int { FrameGenOff = 0, FrameGenFsr3 = 1, FrameGenCount = 2 };
 inline constexpr const char* FrameGenNames[FrameGenCount] = {"off", "fsr3"};
 /// bbport.ini dlss_quality: auto (render_res decides the render size) or one of NVIDIA's modes,
-/// which set the render size from dlss_output (scripts/patches.py render_plan; at start).
+/// which set the render size from dlss_output (CTR-NitroFueled-PC's render_plan; not applied for Deadpool).
 inline constexpr const char* DlssQualityNames[] = {"auto", "dlaa", "quality", "balanced",
                                                    "performance", "ultra_performance"};
 inline constexpr int DlssQualityCount = 6;
@@ -140,7 +138,7 @@ struct Values {
     std::atomic<int> active_render_width{1920}, active_render_height{1080};
     /// Applied at start (patches.py); the menu shows when a restart is needed.
     std::atomic<bool> effects[EffectCount]{};
-    std::atomic<bool> game_patches[GamePatchCount]{}; ///< SacredFire: see GamePatches
+    std::atomic<bool> game_patches[GamePatchSlots]{}; ///< SacredFire: see GamePatches
     std::atomic<int> model_lod{0}; ///< -2 highest .. 2 lowest, 0 the game's
     std::atomic<int> render_res{-1}; ///< index into RenderResHeights, -1 when not set
     /// SacredFire: the upscaler (Temporal: off, FSR 1, FSR 3, DLSS).
@@ -169,7 +167,7 @@ struct Values {
     int startup_upscaler = UpscalerFsr3;
     bool startup_object_motion = true;
     bool startup_effects[EffectCount]{};
-    bool startup_game_patches[GamePatchCount]{};
+    bool startup_game_patches[GamePatchSlots]{};
     int startup_model_lod = 0;
     int startup_render_res = -1;
     int startup_temporal = TemporalFsr1, startup_dlss_quality = 0, startup_dlss_output = 0;

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""SacredFire launcher (GTK4 / libadwaita): runs Crash Team Racing: Nitro-Fueled natively on Linux.
+"""SacredFire launcher (GTK4 / libadwaita): runs Deadpool (PS4) natively on Linux.
 
-Picks the game folder (the merged 1.21 dump), the controller and the start-up options passed to
+Picks the game folder (the dumped game), the controller and the start-up options passed to
 run.sh as environment variables, edits the port's settings in bbport.ini (game patches, FPS
 counter), starts and stops the game and shows its output. Launcher settings live in
 ~/.config/sacredfire-launcher/settings.json. `--play` starts the game with the saved settings
 without a window (Steam Deck game mode).
 
-Derived from bbport's launcher (removed with the Bloodborne profile on 2026-10-09); this one
-knows only the CTR profile.
+Derived from bbport's launcher by way of CTR-NitroFueled-PC; this one knows only the Deadpool
+profile.
 """
 
 import json
@@ -52,27 +52,21 @@ CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / 
 CONFIG_FILE = CONFIG_DIR / "settings.json"
 MAX_LOG_LINES = 5000
 TITLE = "SacredFire"
-GAME = "Crash Team Racing: Nitro-Fueled"
+GAME = "Deadpool"
 
 # Choices: (label, value); the first is the default.
 UI_LANGUAGES = [("System", ""), ("English", "en"), ("Русский", "ru"), ("Português (Brasil)", "pt_BR")]
-# The languages CUSA13795 (the Americas build) has, as PS4 system language codes.
-LANGUAGES = [("English", "1"), ("Spanish (Latin America)", "20"), ("French", "2"),
-             ("Portuguese (Brazil)", "17")]
+# The languages CUSA03528 (the European build) has, as PS4 system language codes.
+LANGUAGES = [("English", "1"), ("French", "2"), ("Spanish", "3"), ("German", "4"), ("Italian", "5")]
 PRESENT_MODES = [("Mailbox", "Mailbox"), ("FIFO (VSync)", "Fifo"),
                  ("FIFO Relaxed", "FifoRelaxed"), ("Immediate", "Immediate")]
-# Game patches (patches/CrashTeamRacing.xml, scripts/patches.py; community patches by illusion and
-# TroyWarez from https://github.com/illusionyy/PS-Game-Patch): bbport.ini key,
-# label, note. The in-game menu edits the same keys.
-PATCHES = [
-    ("patch_60fps", "60 FPS unlock", "By illusion. 60 in menus, 40-45 in races on a Steam Deck"),
-    ("patch_no_motion_blur", "Disable motion blur", "By illusion"),
-    ("patch_pro_1080p", "1080p in PS4 Pro mode", "By TroyWarez; only with PS4 Pro mode below"),
-]
+# Game patches (patches/*.xml, scripts/patches.py GAME_PATCH_KEYS): bbport.ini key, label, note.
+# The in-game menu edits the same keys. None for Deadpool yet.
+PATCHES = []
 
 DEFAULTS = {
     "ui_language": "",
-    "game_dir": "" if PACKAGED else str(PORT_DIR / "orig" / "CUSA13795"),
+    "game_dir": "" if PACKAGED else str(PORT_DIR / "orig" / "CUSA03528"),
     "user_dir": "",
     "language": "1",
     "fullscreen": False,
@@ -282,8 +276,8 @@ class LauncherWindow(Adw.ApplicationWindow):
         page = Adw.PreferencesPage()
 
         game = Adw.PreferencesGroup(title=tr("Game"),
-                                    description=tr("The dumped game with its 1.21 update merged over the base (eboot.bin, sce_module, ...)"))
-        self.game_row = Adw.ActionRow(title=tr("Game folder (CUSA13795)"))
+                                    description=tr("The dumped game (eboot.bin, sce_module, ...)"))
+        self.game_row = Adw.ActionRow(title=tr("Game folder (CUSA03528)"))
         self.game_status = Gtk.Image(valign=Gtk.Align.CENTER)
         self.game_row.add_suffix(self.game_status)
         self.game_row.add_suffix(flat_button("folder-open-symbolic", tr("Choose the folder with eboot.bin"), self.on_choose_game))
@@ -309,15 +303,15 @@ class LauncherWindow(Adw.ApplicationWindow):
         controls.add(self.gamepad_row)
         page.add(controls)
 
-        patches = Adw.PreferencesGroup(title=tr("Game patches"),
-                                       description=tr("From patches/CrashTeamRacing.xml (illusionyy/PS-Game-Patch), applied at start; "
-                                                      "also in the in-game menu"))
         self.patch_rows = {}
-        for key, label, note in PATCHES:
-            row = Adw.SwitchRow(title=tr(label), subtitle=tr(note), active=self.ini.get(key) == "1")
-            patches.add(row)
-            self.patch_rows[key] = row
-        page.add(patches)
+        if PATCHES:
+            patches = Adw.PreferencesGroup(title=tr("Game patches"),
+                                           description=tr("From patches/*.xml, applied at start; also in the in-game menu"))
+            for key, label, note in PATCHES:
+                row = Adw.SwitchRow(title=tr(label), subtitle=tr(note), active=self.ini.get(key) == "1")
+                patches.add(row)
+                self.patch_rows[key] = row
+            page.add(patches)
 
         console = Adw.PreferencesGroup(title=tr("Console"))
         self.neo_row = Adw.SwitchRow(title=tr("PS4 Pro mode"),
@@ -388,12 +382,12 @@ class LauncherWindow(Adw.ApplicationWindow):
         elif problem:
             tooltip = game_check.explain(*problem)
             self.game_row.set_subtitle(f"{path}\n{tooltip}")
-        elif profile and profile["name"] != "ctr":
-            tooltip = tr("This is {}; this launcher runs Crash Team Racing: Nitro-Fueled").format(profile["game"])
+        elif profile and profile["name"] != "deadpool":
+            tooltip = tr("This is {}; this launcher runs Deadpool").format(profile["game"])
             problem = ("other_title", profile["title"], profile["version"])
             self.game_row.set_subtitle(f"{path}\n{tooltip}")
         else:
-            tooltip = f"{GAME} CUSA13795, 1.21"
+            tooltip = f"{profile['game'] if profile else GAME} {profile['title'] if profile else ''} {profile['version'] if profile else ''}".strip()
         self.game_status.set_from_icon_name("object-select-symbolic" if ok and not problem else "dialog-warning-symbolic")
         self.game_status.set_tooltip_text(tooltip)
         self.launch_button.set_sensitive((ok and not problem) or self.process is not None)
