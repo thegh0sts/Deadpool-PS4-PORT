@@ -116,3 +116,12 @@ bound (`Runtime::UploadStencil`). The log says "Stencil sync: ..." the first 4 t
 The copy is linear (no detiling): exact for fills, not for patterned stencil data.
 
 The "Guest write check: EOS fence" lines are expected for UE3 and are now reported 4 times only.
+
+Update: the wedges were not the stencil (that fix stays: it is correct, but changed nothing
+visible). Live bisection with `BB_TOGGLE_FILE` found them: bit 4096 (PreparedResources) or 8192
+(DrawPreparation) off removes them. The draw-preparation workers read each draw's vertex V#s
+through the user-data pointer from guest memory ahead of the GPU thread, and that read is not
+covered by the flattened-user-data check. UE3 writes the V# tables into command buffers it
+reuses every other frame, so the workers read a stale table: meshes drawn from the wrong
+streams. `ResolveVertexBuffers` now compares the worker's V#s with the in-order ones and falls
+back on any difference ("Draw preparation: stale vertex V#s ..." in the log).

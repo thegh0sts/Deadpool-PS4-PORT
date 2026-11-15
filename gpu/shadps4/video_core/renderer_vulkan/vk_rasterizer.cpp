@@ -2418,6 +2418,32 @@ void Rasterizer::ResolveVertexBuffers(const GraphicsPipeline* pipeline,
                 !BbToggle::Disabled(BbToggle::PreparedResources)
             ? &prepared->vertex
             : nullptr;
+    // deadpool-port: the worker read the vertex V#s through the user-data pointer, from guest
+    // memory at its own time, and that read is not part of the flattened user data the GPU
+    // thread verified. Unreal Engine 3 (Deadpool) writes its V# tables into the command
+    // buffers it reuses every other frame, so a worker running ahead read last use's table:
+    // meshes were drawn from other meshes' streams (exploded geometry, alternating frames).
+    // The V#s are compared with the ones read in order now; any difference: regular path.
+    if (ready) {
+        const auto& vs = pipeline->GetStage(Shader::SwStage::Vertex);
+        bool same = true;
+        for (u32 i = 0; same && i < ready->count; ++i) {
+            const AmdGpu::Buffer now = packet_vsharps.size() == ready->count
+                                           ? packet_vsharps[i]
+                                           : fetch->attributes[i].GetSharp(vs);
+            same = std::memcmp(&now, &ready->buffers[i], sizeof(now)) == 0;
+        }
+        if (!same) {
+            static std::atomic<u64> stale{0};
+            const u64 n = stale.fetch_add(1) + 1;
+            if (n <= 4 || (n & (n - 1)) == 0) {
+                std::printf("Draw preparation: stale vertex V#s from a worker, %llu draws so far "
+                            "(taken from memory instead)\n",
+                            (unsigned long long)n);
+            }
+            ready = nullptr;
+        }
+    }
     if (ready) {
         attributes.assign(ready->attributes, ready->attributes + ready->count);
         bindings.assign(ready->bindings, ready->bindings + ready->count);
