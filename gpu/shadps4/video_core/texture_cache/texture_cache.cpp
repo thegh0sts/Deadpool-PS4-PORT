@@ -15,6 +15,7 @@
 #include "core/memory.h"
 #include "video_core/buffer_cache/buffer_cache.h"
 #include "video_core/page_manager.h"
+#include "video_core/renderer_vulkan/vk_frame_capture.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_runtime.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
@@ -919,6 +920,17 @@ void TextureCache::RefreshStencil(Image& depth_image) {
     if (logged.fetch_add(1) < 4) {
         std::printf("Stencil sync: GPU write to the stencil of %#llx (%ux%u) copied into its depth image\n",
                     (unsigned long long)depth_image.info.guest_address, width, height);
+    }
+    static std::atomic<u64> refreshes{0};
+    const u64 n = refreshes.fetch_add(1) + 1;
+    if ((n & (n - 1)) == 0 && n >= 16) {
+        std::printf("Stencil sync: %llu refreshes so far\n", (unsigned long long)n);
+    }
+    if (Vulkan::FrameCapture::Active()) {
+        char note[96];
+        std::snprintf(note, sizeof(note), "\n  stencil of %#llx refreshed from memory (%ux%u)",
+                      (unsigned long long)depth_image.info.guest_address, width, height);
+        Vulkan::FrameCapture::Note(note);
     }
     scheduler.EndRendering();
     const auto [buffer, offset] = buffer_cache.ObtainBufferForImage(address, size);

@@ -1717,6 +1717,33 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
                           u32(regs.depth_control.depth_write_enable));
             FrameCapture::Note(note);
         }
+        // deadpool-port: depth and stencil state of stencil draws (light volumes and the shadow
+        // projection tested against them).
+        if (const auto& dc = regs.depth_control; dc.stencil_enable ||
+                                                 regs.depth_render_control.stencil_clear_enable) {
+            const auto& sc = regs.stencil_control;
+            const auto& f = regs.stencil_ref_front;
+            const auto& b = regs.stencil_ref_back;
+            char note[320];
+            std::snprintf(
+                note, sizeof(note),
+                "\n  stencil ps %08x idx %u: z %u%u f%u | st bf%u front f%u ops %u/%u/%u "
+                "test %u op %u mask %02x wmask %02x | back f%u ops %u/%u/%u test %u op %u mask %02x "
+                "wmask %02x | cull %u%u ff%u | clear z%u s%u (%u) | ctl %#x",
+                u32(ps ? ps->pgm_hash : 0), num_indices, u32(dc.depth_enable),
+                u32(dc.depth_write_enable), u32(dc.depth_func), u32(dc.backface_enable),
+                u32(dc.stencil_ref_func), u32(sc.stencil_fail_front), u32(sc.stencil_zpass_front),
+                u32(sc.stencil_zfail_front), u32(f.stencil_test_val), u32(f.stencil_op_val), u32(f.stencil_mask),
+                u32(f.stencil_write_mask), u32(dc.stencil_bf_func), u32(sc.stencil_fail_back),
+                u32(sc.stencil_zpass_back), u32(sc.stencil_zfail_back), u32(b.stencil_test_val),
+                u32(b.stencil_op_val), u32(b.stencil_mask), u32(b.stencil_write_mask),
+                u32(regs.polygon_control.cull_front), u32(regs.polygon_control.cull_back),
+                u32(regs.polygon_control.front_face),
+                u32(regs.depth_render_control.depth_clear_enable),
+                u32(regs.depth_render_control.stencil_clear_enable), u32(regs.stencil_clear),
+                std::bit_cast<u32>(regs.depth_render_control));
+            FrameCapture::Note(note);
+        }
     }
     DebugState.IncDrawCall();
 
