@@ -591,9 +591,20 @@ static void sample_host_from(PadData *d, SDL_Gamepad *g, int keyboard, PadCal *c
     }
     if (k) apply_keyboard(d,k);
 }
+/* deadpool-port: the keyboard drives the game only with BB_KEYBOARD=1, until its bindings follow
+ * Deadpool's official PC controls (they are still the earlier port's). */
+static int keyboard_enabled(void) {
+    static int on=-1;
+    if (on<0) {
+        const char *e=getenv("BB_KEYBOARD");
+        on=e && e[0]=='1';
+        printf("Runtime: keyboard input %s\n",on ? "on (BB_KEYBOARD=1)" : "off (controller only; BB_KEYBOARD=1 turns it on)");
+    }
+    return on;
+}
 static void sample_host(PadData *d) {
     SDL_Gamepad *g=current_gamepad();
-    sample_host_from(d,g,1,&cals[0]);
+    sample_host_from(d,g,keyboard_enabled(),&cals[0]);
 }
 /* Ports 2..4: their own gamepad only, no keyboard, no scripted input. */
 static void sample_port(PadData *d, int p) {

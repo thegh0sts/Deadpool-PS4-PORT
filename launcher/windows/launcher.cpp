@@ -2759,9 +2759,9 @@ void ControllersPage() {
         ImGui::TextColored(ImVec4(1, 1, 1, 1), "%s", ICON_GAMEPAD);
         ImGui::SameLine();
         ImGui::TextWrapped("%s", T("No hay mandos conectados. Conecta uno por USB o Bluetooth: aparece aquí al momento. "
-                                   "El teclado también funciona siempre.",
+                                   "El teclado está desactivado por ahora.",
                                    "No controllers connected. Plug one in over USB or pair it over Bluetooth: it shows "
-                                   "up here at once. The keyboard always works too."));
+                                   "up here at once. The keyboard is off for now."));
         EndCard();
     } else {
         bool found = false;
@@ -2859,8 +2859,8 @@ void ControllersPage() {
             ImGui::EndCombo();
         }
         if (n == 1)
-            HelpMarker(T("El jugador 1 también usa el teclado. En automático juega el mando que toques: coge cualquiera y pulsa un botón.",
-                         "Player 1 also uses the keyboard. On automatic, the controller you touch plays: pick any and press a button."));
+            HelpMarker(T("En automático juega el mando que toques: coge cualquiera y pulsa un botón.",
+                         "On automatic, the controller you touch plays: pick any and press a button."));
         ImGui::PopID();
     }
 
