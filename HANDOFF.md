@@ -148,7 +148,11 @@ the summed count is written to render backend 0's end word after the GPU finishe
 
 Launcher: Settings > Display > "Game resolution" (launcher.ini `screen_size`) sets
 `BB_SCREEN_SIZE` (run.py / run.sh -> scripts/patches.py `--builtin screen_size=WxH`). Offered:
-1920x1080 (original), 2560x1080, 3440x1440, 3840x1600.
+1920x1080 (original) and 2560x1080; any WxH works through the variable. "Output" (bbport.ini
+`output_size`, Auto / 16:9 / 2560x1080, 3440x1440, 3840x1600) is the frame the presenter's
+display pass draws (FSR 1 when on), then fitted to the window (vk_presenter.cpp,
+SetExpectedGameSize); Auto keeps the window's size. So 21:9 at 3440x1440 = game 2560x1080 +
+output 3440x1440 + FSR 1. bbport.ini `output_res` is still only the (off) temporal upscaler's.
 
 - Screen size: the game's GScreenWidth/GScreenHeight (0x24e0578 / 0x24e057c) are set once, to
   1920x1080, by the function at image+0x758bb0; nothing else hard-codes 1080p. The RHI init

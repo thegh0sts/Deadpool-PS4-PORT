@@ -678,7 +678,12 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
 
     {
         const vk::Extent2D extent = swapchain.GetExtent();
-        SetExpectedGameSize(s32(extent.width), s32(extent.height));
+        // bbport.ini output_size: the frame FSR 1 draws at that size, then the blit below fits it
+        // to the window; unset, the frame is the window's size.
+        const auto& bb = BbSettings::Get();
+        const int output_w = bb.output_width.load(), output_h = bb.output_height.load();
+        SetExpectedGameSize(output_w > 0 ? output_w : s32(extent.width),
+                            output_h > 0 ? output_h : s32(extent.height));
         const vk::ImageSubresourceRange color_range{
             .aspectMask = vk::ImageAspectFlagBits::eColor,
             .baseMipLevel = 0,

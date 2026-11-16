@@ -152,6 +152,10 @@ struct Values {
     bool legacy_fsr3 = false;
     std::atomic<float> fsr3_sharpness{0.3f}; ///< FSR 3's RCAS, 0 off .. 1
     std::atomic<int> output_res{OutputDefault}; ///< index into OutputWidths
+    /// bbport.ini output_size=WxH (launcher Settings > Display > Output): the frame the display
+    /// pass (FSR 1 or a plain scale) draws, then fitted to the window; 0x0 (auto): the window.
+    std::atomic<int> output_width{0};
+    std::atomic<int> output_height{0};
     /// v0.3 native ultrawide aspect (bbport.ini aspect_ratio): 0=16:9, 1=21:9, 2=32:9.
     /// Applied at start by run.py (needs a restart); upscaling is off while ultrawide.
     std::atomic<int> aspect_ratio{0};

@@ -538,11 +538,10 @@ constexpr Choice kPresentModes[] = {
 constexpr int kFpsLimits[] = {0, 30, 60, 72, 90, 120, 144, 240};
 // The game's own screen size (launcher.ini screen_size -> BB_SCREEN_SIZE -> scripts/patches.py
 // screen_size=WxH): every render target follows it, and wider than 16:9 widens the view (Hor+).
+// The larger 21:9 sizes are reached through Output (FSR 1) instead: 2560x1080 upscaled.
 constexpr Choice kScreenSizes[] = {
     {"1920 x 1080 (16:9, original)", "1920 x 1080 (16:9, original)", ""},
     {"2560 x 1080 (21:9)", "2560 x 1080 (21:9)", "2560x1080"},
-    {"3440 x 1440 (21:9)", "3440 x 1440 (21:9)", "3440x1440"},
-    {"3840 x 1600 (21:9)", "3840 x 1600 (21:9)", "3840x1600"},
 };
 
 struct SaveParam {  // OrbisSaveDataParam
@@ -808,7 +807,14 @@ void StartGame() {
     SetEnv(L"BB_FPS", "auto");
     SetEnv(L"BB_LANGUAGE", GameLanguage());
     SetEnv(L"BB_DISPLAY", a.launcher.Get("display"));
-    SetEnv(L"BB_SCREEN_SIZE", a.launcher.Get("screen_size"));
+    {
+        // Only the sizes the launcher offers (an older build offered 3440x1440 / 3840x1600 here).
+        const std::string size = a.launcher.Get("screen_size");
+        bool offered = false;
+        for (const auto& c : kScreenSizes)
+            if (size == c.value) offered = true;
+        SetEnv(L"BB_SCREEN_SIZE", offered ? size : "");
+    }
     SetEnv(L"BB_PRESENT_MODE", a.launcher.Get("present_mode", "Mailbox"));
     SetEnv(L"BB_GAMEPAD", a.launcher.Get("gamepad"));
     SetEnv(L"BB_MENU_LANGUAGE", g_spanish ? "es" : "en");  // the in-game menu follows the launcher
@@ -1843,23 +1849,29 @@ void SettingsTab() {
     Section(T("Pantalla", "Display"));
     ImGui::SetNextItemWidth(ImGui::GetFontSize() * 18.0f);
     ChoiceCombo(T("Resolución del juego", "Game resolution"), "screen_size", kScreenSizes, "");
-    HelpMarker(T("La resolución a la que dibuja el juego. Las 21:9 amplían la vista a los lados para "
-                 "pantallas ultrapanorámicas; usa pantalla completa en un monitor 21:9.",
-                 "The resolution the game draws at. The 21:9 sizes widen the view at the sides for "
-                 "ultrawide screens; use fullscreen on a 21:9 monitor."));
+    HelpMarker(T("La resolución a la que dibuja el juego. 2560 x 1080 amplía la vista a los lados para "
+                 "pantallas 21:9; Salida la agranda luego al tamaño de tu monitor.",
+                 "The resolution the game draws at. 2560 x 1080 widens the view at the sides for 21:9 "
+                 "screens; Output then enlarges it to your monitor's size."));
     {
-        // The output size (bbport.ini output_res). 16:9 only: the ultrawide modes were made for
-        // CTR's HUD (CTR-NitroFueled-PC, by tcosi).
+        // The output size (bbport.ini output_size): the frame FSR 1 (or a plain scale) draws,
+        // then fitted to the window. Auto: the window's size. With the game at 2560x1080 the 21:9
+        // outputs are FSR 1's upscale of it.
         static constexpr Choice kOutputs[] = {
-            {"1280 x 720", "1280 x 720", "1280x720"},
-            {"1920 x 1080", "1920 x 1080", "1920x1080"},
-            {"2560 x 1440", "2560 x 1440", "2560x1440"},
-            {"3840 x 2160 (4K)", "3840 x 2160 (4K)", "3840x2160"},
+            {"Automática (tamaño de la ventana)", "Auto (window size)", ""},
+            {"1280 x 720 (16:9)", "1280 x 720 (16:9)", "1280x720"},
+            {"1920 x 1080 (16:9)", "1920 x 1080 (16:9)", "1920x1080"},
+            {"2560 x 1440 (16:9)", "2560 x 1440 (16:9)", "2560x1440"},
+            {"3840 x 2160 (16:9, 4K)", "3840 x 2160 (16:9, 4K)", "3840x2160"},
+            {"2560 x 1080 (21:9)", "2560 x 1080 (21:9)", "2560x1080"},
+            {"3440 x 1440 (21:9)", "3440 x 1440 (21:9)", "3440x1440"},
+            {"3840 x 1600 (21:9)", "3840 x 1600 (21:9)", "3840x1600"},
         };
-        if (GameChoiceCombo(T("Salida", "Output"), "output_res", kOutputs, "1920x1080", 18.0f)) {
-            a.game.Erase("aspect_ratio");
-            SaveGameIni();
-        }
+        if (GameChoiceCombo(T("Salida", "Output"), "output_size", kOutputs, "", 18.0f)) SaveGameIni();
+        HelpMarker(T("El tamaño final de la imagen; FSR 1 la agranda hasta él. Para 21:9, pon la resolución "
+                     "del juego en 2560 x 1080 y aquí el tamaño de tu monitor.",
+                     "The picture's final size; FSR 1 enlarges it to this. For 21:9, set the game "
+                     "resolution to 2560 x 1080 and this to your monitor's size."));
     }
     {
         // temporal=off|fsr1 (bbport.ini). FSR 3, FSR 4 and DLSS (and frame generation) read CTR's

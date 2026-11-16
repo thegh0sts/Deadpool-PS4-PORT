@@ -125,6 +125,13 @@ void Set(Values& v, const std::string& key, const std::string& value) {
                 v.output_res = r;
             }
         }
+    } else if (key == "output_size") {
+        int w = 0, h = 0;
+        if (std::sscanf(value.c_str(), "%dx%d", &w, &h) != 2 || w < 640 || h < 360 || w > 7680 || h > 4320) {
+            w = h = 0; // auto: the window
+        }
+        v.output_width = w;
+        v.output_height = h;
     } else if (key == "aspect_ratio") {
         if (value == "21:9" || value == "21x9") v.aspect_ratio = 1;
         else if (value == "32:9" || value == "32x9") v.aspect_ratio = 2;
