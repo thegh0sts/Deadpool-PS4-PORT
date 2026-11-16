@@ -274,7 +274,7 @@ def main():
                        *(['--builtin', 'unlock_fps'] if fps == 'uncap' else []),
                        # BB_FPS=60: illusion's patch (the game's own flip rate at 60).
                        *(['--builtin', 'flip_rate_60'] if fps == '60' else []),
-                       # BB_SCREEN_SIZE=2560x1080: the game's own screen size (ultrawide work).
+                       # BB_SCREEN_SIZE=2560x1080: the game's own screen size; wider than 16:9 also widens the view (Hor+).
                        *(['--builtin', 'screen_size=' + env['BB_SCREEN_SIZE']] if env.get('BB_SCREEN_SIZE') else []))
             if fps == 'auto':
                 # src/runtime_fps.c switches the engine's own 30 FPS wait by level (menu on, gameplay off).

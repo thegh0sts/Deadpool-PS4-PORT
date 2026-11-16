@@ -177,13 +177,64 @@ def compile_external(selected, segments, elf=None):
 
 def screen_size_lines(value):
     """screen_size=WxH: the game's screen size (GScreenWidth/GScreenHeight, 1920x1080), set once
-    by a small function that stores the two constants (ultrawide, step 1: render the scene wider).
+    by a small function that stores the two constants. Every render target, the display buffers
+    and the view follow it; the port's presenter fits the frame to the window by its aspect.
     The instructions are "movl $0x780,(%rax)" and "movl $0x438,(%rax)" 13 bytes apart."""
     width,height=(int(v) for v in value.lower().split('x'))
     if not (640<=width<=7680 and 360<=height<=4320): raise ValueError(f'screen size {value} out of range')
     signature='c7 00 80 07 00 00 48 8d 05 ?? ?? ?? ?? c7 00 38 04 00 00'
     return [(0x00b58bb9,width.to_bytes(4,'little'),signature,2),
             (0x00b58bc6,height.to_bytes(4,'little'),signature,15)]
+
+
+# Hor+ for screens wider than 16:9. The player's view (ULocalPlayer::CalcSceneView, image
+# +0x2dc4b1) builds FPerspectiveMatrix with M00 = 1.0 / tan(FOV/2) and M11 from the view's
+# width and height: the horizontal FOV is kept, so a wider screen loses the top and bottom.
+# The 1.0 is "vmovss <1.0>(%rip),%xmm1"; pointing that load at 16H/(9W) widens the horizontal
+# FOV by the screen's extra width and keeps the vertical FOV of 16:9. The constant is shared
+# with other code, so the load is pointed at another read-only float of that value (exact, or
+# within 0.1%). Cutscenes with a constrained aspect ratio use their own branch (pillarboxed).
+HOR_PLUS_SITE=(0x006dc57b,'c5 fa 10 0d ?? ?? ?? ?? c5 f2 5e c8 c5 fa 10 54 24 74 c5 ea 59 c0 '
+                          'c5 fa 10 94 24 84 00 00 00',0)
+
+
+def find_float(elf, value, tolerance=1e-3):
+    """Image offset of a 4-byte-aligned float equal to value (else the nearest within tolerance,
+    relative), or None. Only the read-only data after the code in the executable load segment is
+    searched (from the last RET-padded function on, where the compiler's float literals live), so
+    a code byte that happens to match is never used: code can be rewritten at load."""
+    phoff,=struct.unpack_from('<Q',elf,0x20)
+    phentsize,phnum=struct.unpack_from('<HH',elf,0x36)
+    exact=struct.pack('<f',value)
+    for i in range(phnum):
+        kind,flags,offset,vaddr,_,filesz,_,_=struct.unpack_from('<IIQQQQQQ',elf,phoff+i*phentsize)
+        if kind!=1 or flags&2 or not flags&1: continue
+        data=elf[offset:offset+filesz]
+        # The PLT (16-byte stubs: jmp *GOT; push index; jmp PLT0) is the last code: the
+        # literals follow it.
+        stubs=[m.end() for m in re.finditer(rb'\xff\x25....\x68....\xe9....',data,re.S)]
+        start=max(stubs) if stubs else len(data)//2
+        start+=(-(vaddr+start))%4
+        best=None
+        for j in range(start,len(data)-3,4):
+            if data[j:j+4]==exact: return vaddr+j
+            v,=struct.unpack_from('<f',data,j)
+            if v==v and abs(v-value)<=tolerance*value and (best is None or abs(v-value)<best[0]):
+                best=(abs(v-value),vaddr+j)
+        if best: return best[1]
+    return None
+
+
+def hor_plus_writes(value, elf):
+    """[(image offset, bytes)] for Hor+ at screen_size=WxH (none at 16:9 or narrower)."""
+    width,height=(int(v) for v in value.lower().split('x'))
+    if width*9<=height*16: return []
+    address,signature,shift=HOR_PLUS_SITE
+    site=locate({'Address':hex(address),'Signature':signature,'SignatureOffset':str(shift)},
+                address-EBOOT_BASE,elf)
+    constant=find_float(elf,16*height/(9*width))
+    if constant is None: raise ValueError(f'no constant near {16*height/(9*width):.6f} for Hor+')
+    return [(site+4,struct.pack('<i',constant-(site+8)))]
 
 
 def compile_builtin(names, segments, elf):
@@ -209,6 +260,8 @@ def compile_builtin(names, segments, elf):
                 if not any(start<=offset and offset+len(data)<=end for start,end in segments):
                     raise ValueError(f'address {address:#x} is outside the eboot')
                 ours.append((offset,data))
+            if name.startswith('screen_size='):
+                ours+=hor_plus_writes(name.partition('=')[2],elf)
         except ValueError as error:
             print(f'Patches: skipped built-in {name}: {error}',file=sys.stderr)
             continue

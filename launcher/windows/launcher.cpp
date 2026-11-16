@@ -536,6 +536,14 @@ constexpr Choice kPresentModes[] = {
     {"Inmediato (sin VSync)", "Immediate (no VSync)", "Immediate"},
 };
 constexpr int kFpsLimits[] = {0, 30, 60, 72, 90, 120, 144, 240};
+// The game's own screen size (launcher.ini screen_size -> BB_SCREEN_SIZE -> scripts/patches.py
+// screen_size=WxH): every render target follows it, and wider than 16:9 widens the view (Hor+).
+constexpr Choice kScreenSizes[] = {
+    {"1920 x 1080 (16:9, original)", "1920 x 1080 (16:9, original)", ""},
+    {"2560 x 1080 (21:9)", "2560 x 1080 (21:9)", "2560x1080"},
+    {"3440 x 1440 (21:9)", "3440 x 1440 (21:9)", "3440x1440"},
+    {"3840 x 1600 (21:9)", "3840 x 1600 (21:9)", "3840x1600"},
+};
 
 struct SaveParam {  // OrbisSaveDataParam
     char title[128], subtitle[128], detail[1024];
@@ -800,6 +808,7 @@ void StartGame() {
     SetEnv(L"BB_FPS", "auto");
     SetEnv(L"BB_LANGUAGE", GameLanguage());
     SetEnv(L"BB_DISPLAY", a.launcher.Get("display"));
+    SetEnv(L"BB_SCREEN_SIZE", a.launcher.Get("screen_size"));
     SetEnv(L"BB_PRESENT_MODE", a.launcher.Get("present_mode", "Mailbox"));
     SetEnv(L"BB_GAMEPAD", a.launcher.Get("gamepad"));
     SetEnv(L"BB_MENU_LANGUAGE", g_spanish ? "es" : "en");  // the in-game menu follows the launcher
@@ -1832,6 +1841,12 @@ void SettingsTab() {
                "Fewer hitches when an effect is first seen; an effect may show up a frame late."));
 
     Section(T("Pantalla", "Display"));
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 18.0f);
+    ChoiceCombo(T("Resolución del juego", "Game resolution"), "screen_size", kScreenSizes, "");
+    HelpMarker(T("La resolución a la que dibuja el juego. Las 21:9 amplían la vista a los lados para "
+                 "pantallas ultrapanorámicas; usa pantalla completa en un monitor 21:9.",
+                 "The resolution the game draws at. The 21:9 sizes widen the view at the sides for "
+                 "ultrawide screens; use fullscreen on a 21:9 monitor."));
     {
         // The output size (bbport.ini output_res). 16:9 only: the ultrawide modes were made for
         // CTR's HUD (CTR-NitroFueled-PC, by tcosi).

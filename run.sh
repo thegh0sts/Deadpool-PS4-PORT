@@ -86,7 +86,7 @@ fps=${BB_FPS:-auto}  # auto: 30 in the main menu, unlocked in gameplay; uncap, 6
 fps_patch=; [[ $fps == uncap ]] && fps_patch=unlock_fps; [[ $fps == 60 ]] && fps_patch=flip_rate_60
 "$PYTHON" scripts/patches.py --patches-dir "${BB_PATCHES_DIR:-patches}" --patches-config "${BB_PATCHES_CONFIG:-$data/patches.json}" \
     --app-version "$app_version" --title-id "$title_id" --out "$out" --settings "$BB_CONFIG" \
-    ${fps_patch:+--builtin "$fps_patch"}
+    ${fps_patch:+--builtin "$fps_patch"} ${BB_SCREEN_SIZE:+--builtin "screen_size=$BB_SCREEN_SIZE"}
 patch_args=(--patches "$out/patches.bin")
 # BB_NEO=1: PS4 Pro mode (sceKernelIsNeoMode, 7-CPU mode, 5568 MiB direct memory); the game then
 # picks its Pro rendering path. Off by default: the Steam Deck is closer to a base PS4.

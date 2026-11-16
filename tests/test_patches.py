@@ -6,7 +6,7 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-from patches import (EBOOT_BASE, GAME_PATCH_KEYS, compile_external, eboot_segments, encode,
+from patches import (EBOOT_BASE, GAME_PATCH_KEYS, compile_builtin, compile_external, eboot_segments, encode,
                      external_patches, external_selection, read_settings, write_blob)
 
 SEGMENTS = [(0, 0x6000000)]
@@ -144,3 +144,37 @@ class GamePatchTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ScreenSizeTests(unittest.TestCase):
+    """screen_size=WxH: the two size constants, and Hor+ (the view's M00 load) beyond 16:9."""
+    SIZE = bytes.fromhex('c7008007000048 8d0500000000 c7003804 0000'.replace(' ', ''))
+    VIEW = bytes.fromhex('c5fa100d00000000 c5f25ec8 c5fa10542474 c5ea59c0 c5fa109424840000 00'.replace(' ', ''))
+    PLT = bytes.fromhex('ff2500000000 6800000000 e900000000'.replace(' ', ''))
+
+    def elf(self):
+        code = bytearray(0x100)
+        code[0x10:0x10 + len(self.SIZE)] = self.SIZE
+        code[0x40:0x40 + len(self.VIEW)] = self.VIEW
+        code[0x80:0x80 + len(self.PLT)] = self.PLT
+        # literals after the PLT: 0.75 at vaddr 0x10c0 (also once in "code", which must be ignored)
+        code[0x30:0x34] = struct.pack('<f', 0.75)
+        code[0xc0:0xc4] = struct.pack('<f', 0.75)
+        code[0xc4:0xc8] = struct.pack('<f', 0.7409510016)
+        return tiny_elf(bytes(code))
+
+    def test_16_9_writes_only_the_size(self):
+        writes = compile_builtin(['screen_size=2560x1440'], [(0x1000, 0x1100)], self.elf())
+        self.assertEqual(writes, [(0x1012, (2560).to_bytes(4, 'little')), (0x101f, (1440).to_bytes(4, 'little'))])
+
+    def test_ultrawide_points_m00_at_16h_over_9w(self):
+        writes = compile_builtin(['screen_size=2560x1080'], [(0x1000, 0x1100)], self.elf())
+        self.assertEqual(writes[:2], [(0x1012, (2560).to_bytes(4, 'little')), (0x101f, (1080).to_bytes(4, 'little'))])
+        site, disp = writes[2]
+        self.assertEqual(site, 0x1044)
+        self.assertEqual(site + 4 + struct.unpack('<i', disp)[0], 0x10c0)
+
+    def test_nearest_constant_within_a_tenth_of_a_percent(self):
+        writes = compile_builtin(['screen_size=3840x1600'], [(0x1000, 0x1100)], self.elf())
+        site, disp = writes[2]
+        self.assertEqual(site + 4 + struct.unpack('<i', disp)[0], 0x10c4)

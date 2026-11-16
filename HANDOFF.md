@@ -144,14 +144,26 @@ CarriedScope ends and restarts the Vulkan query at render pass / command buffer 
 the summed count is written to render backend 0's end word after the GPU finishes
 (SignalAfterGpu). BB_OCCLUSION=0 restores the stand-in.
 
-## Ultrawide (shelved)
+## Ultrawide 21:9 (first build, untested)
 
-Started, then put on hold by the user. Findings so far: the game's screen size comes from two
-globals at 0x24e0578 / 0x24e057c (GScreenWidth/GScreenHeight), set to 1920x1080 by a small function
-at image+0x758bb0 (10 readers; one compares the width with 1280). `BB_SCREEN_SIZE=2560x1080`
-(run.py -> scripts/patches.py `--builtin screen_size=WxH`) patches those two constants; untested.
-Still to do: whether render targets, display buffers and the port's presenter follow; Hor+ field
-of view; HUD/Scaleform centred at 16:9; Bink videos pillarboxed; 21:9 output sizes in the launcher.
+Launcher: Settings > Display > "Game resolution" (launcher.ini `screen_size`) sets
+`BB_SCREEN_SIZE` (run.py / run.sh -> scripts/patches.py `--builtin screen_size=WxH`). Offered:
+1920x1080 (original), 2560x1080, 3440x1440, 3840x1600.
+
+- Screen size: the game's GScreenWidth/GScreenHeight (0x24e0578 / 0x24e057c) are set once, to
+  1920x1080, by the function at image+0x758bb0; nothing else hard-codes 1080p. The RHI init
+  (image+0x741950) sizes the back buffers from them (0x24e0904 / 0x24e0908), so the display
+  buffers follow and the port's presenter fits the frame to the window by its aspect.
+- Hor+: the player's view (image+0x2dc4b1, ULocalPlayer::CalcSceneView's FPerspectiveMatrix)
+  keeps the horizontal FOV: M00 = 1.0 / tan(FOV/2), M11 from the view's width and height. The
+  load of that 1.0 (image+0x2dc57b, "vmovss <1.0>(%rip),%xmm1"; the constant is shared) is pointed
+  at a read-only float equal to 16H/(9W) (exact for 2560x1080; within 0.03% for the others),
+  searched for in the literals after the PLT. The vertical FOV stays that of 16:9.
+- The constrained-aspect branch (0x278 flag 2, aspect at 0x280: cutscene cameras) is left as it
+  is: those cameras should come out pillarboxed.
+- Unknown until tested: the HUD and menus (Scaleform: centred at 16:9 or stretched), Bink videos
+  (likely stretched), GPU memory at 3840x1600 (render targets ~3x those of 1080p), other
+  projections that may need the same change (0x2dd2b3: fixed 45-degree FOV; 0x2e8c02; 0x3bc3a1).
 
 ## Keyboard and mouse (parked)
 
