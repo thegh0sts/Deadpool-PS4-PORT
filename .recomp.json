@@ -1,0 +1,12 @@
+
+{
+  "$schema": "https://recomp.fyi/schema/v1.json",
+  "game": "Deadpool",
+  "wikidata": "Q2112423",
+  "system": "PS4",
+  "type": "recomp",
+  "status": "playable",
+  "targets": ["Windows"],
+  "toolchain": "bbport",
+  "maintainers": "thegh0sts"
+}
